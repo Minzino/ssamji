@@ -311,14 +311,7 @@ struct PaletteView: View {
                     .textSelection(.enabled)
             }
         case .link:
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: "link.circle.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(.blue)
-                Text(item.url ?? item.title)
-                    .font(.body)
-                    .textSelection(.enabled)
-            }
+            LinkPreviewView(urlString: item.url ?? item.title)
         case .color:
             VStack(alignment: .leading, spacing: 10) {
                 RoundedRectangle(cornerRadius: 10)
