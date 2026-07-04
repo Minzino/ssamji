@@ -114,8 +114,10 @@ final class PaletteController {
         case 126: // up
             viewModel.moveSelection(by: -1)
             return true
-        case 36, 76: // return, keypad enter
-            viewModel.commitSelection()
+        case 36, 76: // return, keypad enter — ⇧⏎ 는 복사만, ⏎ 는 다이렉트 페이스트
+            let action: PaletteViewModel.CommitAction =
+                event.modifierFlags.contains(.shift) ? .copyOnly : .paste
+            viewModel.commitSelection(action: action)
             return true
         default:
             // ⌘1~9 퀵 선택

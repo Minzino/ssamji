@@ -35,8 +35,8 @@ final class AppState: ObservableObject {
 
         if let store {
             let controller = PaletteController(store: store)
-            controller.viewModel.onCommit = { [weak self] item in
-                self?.commit(item)
+            controller.viewModel.onCommit = { [weak self] item, action in
+                self?.commit(item, action: action)
             }
             palette = controller
         }
@@ -71,11 +71,15 @@ final class AppState: ObservableObject {
         totalCount = (try? store.count()) ?? 0
     }
 
-    // MARK: - 선택 항목을 클립보드로 (M3 에서 다이렉트 페이스트로 확장)
+    // MARK: - 선택 확정: 클립보드로 복사 + (기본) 이전 앱에 다이렉트 페이스트
 
-    private func commit(_ item: ClipItem) {
+    private func commit(_ item: ClipItem, action: PaletteViewModel.CommitAction) {
         palette?.hide()
         writeToPasteboard(item)
+        if action == .paste {
+            // 팔레트가 nonactivating 패널이라 이전 앱이 여전히 활성 상태 — 바로 ⌘V 합성
+            PasteEngine.pasteToFrontmostApp()
+        }
         if let store {
             var bumped = item
             bumped.updatedAt = Date()

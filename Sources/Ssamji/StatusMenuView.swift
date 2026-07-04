@@ -13,7 +13,7 @@ struct StatusMenuView: View {
                 Image(systemName: "doc.on.clipboard.fill")
                 Text("쌈지").font(.headline)
                 Spacer()
-                Text("v0.2.0 · M2").font(.caption).foregroundStyle(.secondary)
+                Text("v0.3.0 · M3").font(.caption).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {

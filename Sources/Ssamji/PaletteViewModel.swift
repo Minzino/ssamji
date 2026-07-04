@@ -10,8 +10,14 @@ final class PaletteViewModel: ObservableObject {
     @Published var results: [ClipItem] = []
     @Published var selectedIndex = 0
 
+    /// 선택 확정 방식: 다이렉트 페이스트 또는 클립보드 복사만
+    enum CommitAction {
+        case paste
+        case copyOnly
+    }
+
     private let store: Store
-    var onCommit: ((ClipItem) -> Void)?
+    var onCommit: ((ClipItem, CommitAction) -> Void)?
 
     init(store: Store) {
         self.store = store
@@ -41,14 +47,14 @@ final class PaletteViewModel: ObservableObject {
         selectedIndex = min(max(selectedIndex + delta, 0), results.count - 1)
     }
 
-    func select(index: Int) {
+    func select(index: Int, action: CommitAction = .paste) {
         guard results.indices.contains(index) else { return }
         selectedIndex = index
-        commitSelection()
+        commitSelection(action: action)
     }
 
-    func commitSelection() {
+    func commitSelection(action: CommitAction = .paste) {
         guard let item = selectedItem else { return }
-        onCommit?(item)
+        onCommit?(item, action)
     }
 }
