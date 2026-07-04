@@ -223,9 +223,8 @@ struct PaletteView: View {
                 .padding(6)
             }
             .onChange(of: vm.selectedIndex) { _, newIndex in
-                withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(newIndex, anchor: .center)
-                }
+                // 반복 입력 중 애니메이션이 쌓이며 밀리는 것 방지 — 즉시 스크롤
+                proxy.scrollTo(newIndex, anchor: .center)
             }
             .overlay {
                 if vm.results.isEmpty {
@@ -242,7 +241,7 @@ struct PaletteView: View {
 
     private var previewPane: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let item = vm.selectedItem {
+            if let item = vm.previewItem {
                 ScrollView {
                     preview(for: item)
                         .frame(maxWidth: .infinity, alignment: .leading)

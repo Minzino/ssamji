@@ -30,8 +30,16 @@ final class PaletteViewModel: ObservableObject {
     }
     @Published var results: [ClipItem] = []
     @Published var selectedIndex = 0 {
-        didSet { secretRevealed = false }
+        didSet {
+            secretRevealed = false
+            schedulePreviewUpdate()
+        }
     }
+
+    /// 프리뷰에 실제로 그려지는 항목 — 빠른 스크롤 중에는 갱신을 미뤄서(디바운스) 히치를 막는다.
+    /// 붙여넣기 등 동작은 항상 selectedItem(즉시값)을 쓴다.
+    @Published var previewItem: ClipItem?
+    private var previewDebounce: Task<Void, Never>?
 
     // 보드
     @Published var boards: [Board] = []
@@ -112,6 +120,17 @@ final class PaletteViewModel: ObservableObject {
         results = (try? store.items(matching: trimmed, boardID: selectedBoardID, limit: 50)) ?? []
         selectedIndex = 0
         secretRevealed = false
+        previewItem = selectedItem // 목록 갱신 직후엔 즉시 표시
+    }
+
+    private func schedulePreviewUpdate() {
+        previewDebounce?.cancel()
+        let target = selectedItem
+        previewDebounce = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 90_000_000)
+            guard !Task.isCancelled else { return }
+            self?.previewItem = target
+        }
     }
 
     /// 결과를 다시 읽되 특정 항목(uuid)의 선택을 유지한다 — 라벨/보드 변경 후 선택이 튀지 않게.
@@ -123,6 +142,7 @@ final class PaletteViewModel: ObservableObject {
         } else {
             selectedIndex = min(selectedIndex, max(results.count - 1, 0))
         }
+        previewItem = selectedItem
     }
 
     // MARK: - 보드 탭
