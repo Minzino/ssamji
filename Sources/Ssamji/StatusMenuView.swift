@@ -102,6 +102,24 @@ struct StatusMenuView: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
 
+            HStack {
+                Text("히스토리 보관")
+                    .font(.caption)
+                Spacer()
+                Picker("", selection: $state.retentionDays) {
+                    Text("7일").tag(7)
+                    Text("30일").tag(30)
+                    Text("90일").tag(90)
+                    Text("무제한").tag(0)
+                }
+                .pickerStyle(.menu)
+                .controlSize(.small)
+                .fixedSize()
+            }
+            Text("보드에 넣은 항목은 기간과 무관하게 보존됩니다.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
             if state.pasteImportAvailable {
                 Divider()
                 VStack(alignment: .leading, spacing: 4) {

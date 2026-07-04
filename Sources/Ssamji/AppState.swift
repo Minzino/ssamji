@@ -24,6 +24,33 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// 히스토리 보관 기간(일). 0 = 무제한(기본 — 이주 직후 옛 히스토리가 날아가지 않게).
+    /// 보드 항목은 기간과 무관하게 영구 보존.
+    @Published var retentionDays: Int = UserDefaults.standard.object(forKey: "retentionDays") as? Int ?? 0 {
+        didSet {
+            UserDefaults.standard.set(retentionDays, forKey: "retentionDays")
+            runCleanup()
+        }
+    }
+
+    private var lastCleanupAt = Date.distantPast
+
+    private func runCleanup() {
+        guard let store, retentionDays > 0 else { return }
+        lastCleanupAt = Date()
+        if let deleted = try? store.cleanup(olderThanDays: retentionDays), deleted > 0 {
+            refresh()
+            palette?.viewModel.search()
+        }
+    }
+
+    /// 캡처 경로에서 하루 한 번 정리 (앱이 오래 떠 있어도 주기 정리 보장)
+    private func cleanupIfDue() {
+        if Date().timeIntervalSince(lastCleanupAt) > 86_400 {
+            runCleanup()
+        }
+    }
+
     private(set) var store: Store?
     private(set) var palette: PaletteController?
     private let watcher = ClipboardWatcher()
@@ -56,6 +83,7 @@ final class AppState: ObservableObject {
         }
 
         refresh()
+        runCleanup()
 
         // 검증용 CLI 플래그: 실행 파일을 직접 돌릴 때 임포트를 트리거
         if CommandLine.arguments.contains("--import-paste") {
@@ -125,6 +153,7 @@ final class AppState: ObservableObject {
         do {
             try store.save(item)
             refresh()
+            cleanupIfDue()
         } catch {
             lastError = "저장 실패: \(error.localizedDescription)"
         }
