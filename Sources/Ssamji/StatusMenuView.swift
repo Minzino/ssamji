@@ -45,7 +45,7 @@ struct StatusMenuView: View {
                             Image(systemName: item.kind.symbolName)
                                 .frame(width: 14)
                                 .foregroundStyle(.secondary)
-                            Text(item.title)
+                            Text(item.displayTitle)
                                 .font(.caption)
                                 .lineLimit(1)
                             Spacer()

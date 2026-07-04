@@ -46,6 +46,10 @@ final class PaletteViewModel: ObservableObject {
     @Published var newBoardName = ""
     @Published var newBoardSecret = false
 
+    // 라벨 입력 (⌘R, 시크릿 보드 배정 시 자동)
+    @Published var renameVisible = false
+    @Published var renameText = ""
+
     private let store: Store
     var onCommit: ((ClipItem, CommitAction) -> Void)?
 
@@ -85,6 +89,17 @@ final class PaletteViewModel: ObservableObject {
         results = (try? store.items(matching: trimmed, boardID: selectedBoardID, limit: 50)) ?? []
         selectedIndex = 0
         secretRevealed = false
+    }
+
+    /// 결과를 다시 읽되 특정 항목(uuid)의 선택을 유지한다 — 라벨/보드 변경 후 선택이 튀지 않게.
+    func reload(selecting uuid: String? = nil) {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        results = (try? store.items(matching: trimmed, boardID: selectedBoardID, limit: 50)) ?? []
+        if let uuid, let index = results.firstIndex(where: { $0.uuid == uuid }) {
+            selectedIndex = index
+        } else {
+            selectedIndex = min(selectedIndex, max(results.count - 1, 0))
+        }
     }
 
     // MARK: - 보드 탭
@@ -192,6 +207,36 @@ final class PaletteViewModel: ObservableObject {
         try? store.setBoard(boardID, for: item)
         closePicker()
         reloadBoards()
-        search()
+        reload(selecting: item.uuid)
+
+        // 시크릿 보드에 라벨 없이 들어가면 곧바로 라벨 입력을 띄운다 — 마스킹되면 뭔지 알 수 없으므로
+        if let boardID,
+           boards.first(where: { $0.id == boardID })?.isSecret == true,
+           (item.customTitle ?? "").isEmpty {
+            openRename()
+        }
+    }
+
+    // MARK: - 라벨 (⌘R)
+
+    func openRename() {
+        guard let item = selectedItem else { return }
+        renameText = item.customTitle ?? ""
+        renameVisible = true
+    }
+
+    func closeRename() {
+        renameVisible = false
+    }
+
+    func confirmRename() {
+        guard let item = selectedItem else {
+            renameVisible = false
+            return
+        }
+        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        try? store.setCustomTitle(trimmed.isEmpty ? nil : trimmed, for: item)
+        renameVisible = false
+        reload(selecting: item.uuid)
     }
 }

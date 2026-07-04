@@ -30,7 +30,24 @@ struct PaletteView: View {
                 boardPickerOverlay
             }
         }
+        .overlay {
+            if vm.renameVisible {
+                renameOverlay
+            }
+        }
         .onAppear { searchFocused = true }
+    }
+
+    // MARK: - 라벨 입력 (⌘R)
+
+    private var renameOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .onTapGesture { vm.closeRename() }
+            RenameCard()
+                .environmentObject(vm)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - 보드 탭
@@ -178,7 +195,7 @@ struct PaletteView: View {
                 Image(systemName: "lock.fill")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text("시크릿 항목")
+                Text(item.customTitle?.isEmpty == false ? item.customTitle! : "시크릿 항목")
                     .font(.headline)
                 Text("⏎ 로 바로 붙여넣거나, 내용을 확인하려면 아래 버튼을 누르세요.")
                     .font(.caption)
@@ -266,7 +283,8 @@ struct PaletteView: View {
             hint("↑↓", "이동")
             hint("⏎", vm.directPasteEnabled ? "붙여넣기" : "복사")
             hint("⇧⏎", "복사만")
-            hint("⌘P", "보드에 넣기")
+            hint("⌘P", "보드")
+            hint("⌘R", "라벨")
             hint("⌘⇧[ ]", "보드 전환")
             hint("esc", "닫기")
             Spacer()
@@ -304,7 +322,8 @@ private struct ResultRow: View {
                 .frame(width: 16)
                 .foregroundStyle(selected ? .primary : .secondary)
             VStack(alignment: .leading, spacing: 1) {
-                Text(masked ? "••••••••" : item.title)
+                // 마스킹돼도 라벨은 보여준다 — 라벨이 없을 때만 점 처리
+                Text(masked ? (item.customTitle?.isEmpty == false ? item.customTitle! : "••••••••") : item.displayTitle)
                     .lineLimit(1)
                     .font(.callout)
                 HStack(spacing: 4) {
@@ -411,6 +430,34 @@ private struct BoardPickerCard: View {
             vm.pickerIndex = index
             vm.pickerCommit()
         }
+    }
+}
+
+/// ⌘R 라벨 입력 카드 — 시크릿 보드 배정 직후에도 자동으로 뜬다
+private struct RenameCard: View {
+    @EnvironmentObject private var vm: PaletteViewModel
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("라벨 지정")
+                .font(.headline)
+            Text("마스킹돼도 라벨은 목록에 표시됩니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("예: vsphere pw", text: $vm.renameText)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit { vm.confirmRename() }
+            Text("⏎ 저장 · esc 취소 · 비워두면 라벨 제거")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(width: 300)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        .onAppear { focused = true }
     }
 }
 

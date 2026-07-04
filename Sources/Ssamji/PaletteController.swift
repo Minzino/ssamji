@@ -104,6 +104,15 @@ final class PaletteController {
 
     /// true 를 반환하면 이벤트를 소비한다.
     private func handle(_ event: NSEvent) -> Bool {
+        // 라벨 입력 중: esc 만 가로채고 나머지는 TextField 로 (⏎ 은 onSubmit)
+        if viewModel.renameVisible {
+            if event.keyCode == 53 {
+                viewModel.closeRename()
+                return true
+            }
+            return false
+        }
+
         // 보드 픽커(⌘P)가 열려 있으면 픽커가 키를 독점
         if viewModel.pickerVisible {
             return handlePicker(event)
@@ -128,6 +137,9 @@ final class PaletteController {
             return true
         case 35 where mods == .command: // ⌘P: 보드에 넣기
             viewModel.openPicker()
+            return true
+        case 15 where mods == .command: // ⌘R: 라벨 지정
+            viewModel.openRename()
             return true
         case 33 where mods == [.command, .shift]: // ⌘⇧[ : 이전 보드
             viewModel.cycleBoard(by: -1)

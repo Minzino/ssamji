@@ -66,6 +66,22 @@ final class Store {
             try db.create(index: "idx_items_boardId", on: "items", columns: ["boardId"])
         }
 
+        migrator.registerMigration("v3-customTitle") { db in
+            try db.alter(table: "items") { t in
+                t.add(column: "customTitle", .text)
+            }
+            // FTS 인덱스에 라벨 포함 (라벨로 검색 가능하게 재생성)
+            // synchronize 가 만든 트리거를 먼저 지워야 재생성 시 이름 충돌이 없다
+            try db.dropFTS5SynchronizationTriggers(forTable: "items_fts")
+            try db.drop(table: "items_fts")
+            try db.create(virtualTable: "items_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "items")
+                t.column("title")
+                t.column("text")
+                t.column("customTitle")
+            }
+        }
+
         try migrator.migrate(dbQueue)
     }
 
@@ -160,6 +176,14 @@ final class Store {
         try dbQueue.write { db in
             var updated = item
             updated.boardId = boardID
+            try updated.update(db)
+        }
+    }
+
+    func setCustomTitle(_ title: String?, for item: ClipItem) throws {
+        try dbQueue.write { db in
+            var updated = item
+            updated.customTitle = title
             try updated.update(db)
         }
     }
