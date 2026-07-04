@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/쌈지.app"
-VERSION="0.1.0"
+VERSION="0.2.0"
 
 cd "$ROOT"
 swift build -c release
