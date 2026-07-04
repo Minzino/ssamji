@@ -13,7 +13,7 @@ struct StatusMenuView: View {
                 Image(systemName: "doc.on.clipboard.fill")
                 Text("쌈지").font(.headline)
                 Spacer()
-                Text("v0.3.0 · M3").font(.caption).foregroundStyle(.secondary)
+                Text("v0.4.0 · M4").font(.caption).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {
@@ -82,6 +82,15 @@ struct StatusMenuView: View {
                 },
                 actionLabel: "권한 요청"
             )
+
+            Divider()
+
+            Toggle(isOn: $state.directPasteEnabled) {
+                Text("⏎ 다이렉트 붙여넣기 (끄면 복사만)")
+                    .font(.caption)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
 
             Divider()
 

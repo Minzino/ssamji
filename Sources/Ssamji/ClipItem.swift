@@ -36,6 +36,7 @@ struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, MutablePersi
     var sourceAppBundleID: String?
     var sourceAppName: String?
     var byteSize: Int
+    var boardId: Int64?
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID

@@ -8,6 +8,7 @@ struct PaletteView: View {
     var body: some View {
         VStack(spacing: 0) {
             searchBar
+            boardTabs
             Divider()
             HSplitView {
                 resultList
@@ -24,7 +25,71 @@ struct PaletteView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(.separator, lineWidth: 1)
         )
+        .overlay {
+            if vm.pickerVisible {
+                boardPickerOverlay
+            }
+        }
         .onAppear { searchFocused = true }
+    }
+
+    // MARK: - 보드 탭
+
+    private var boardTabs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                boardTab(title: "전체", color: nil, secret: false, id: nil)
+                ForEach(vm.boards) { board in
+                    boardTab(
+                        title: board.name,
+                        color: Color(hex: board.colorHex),
+                        secret: board.isSecret,
+                        id: board.id
+                    )
+                    .contextMenu {
+                        Button("보드 삭제", role: .destructive) { vm.deleteBoard(board) }
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private func boardTab(title: String, color: Color?, secret: Bool, id: Int64?) -> some View {
+        let selected = vm.selectedBoardID == id
+        return Button {
+            vm.selectBoard(id)
+        } label: {
+            HStack(spacing: 4) {
+                if let color {
+                    Circle().fill(color).frame(width: 7, height: 7)
+                }
+                if secret {
+                    Image(systemName: "lock.fill").font(.system(size: 8))
+                }
+                Text(title).font(.caption)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .background(
+                selected ? AnyShapeStyle(Color.accentColor.opacity(0.25)) : AnyShapeStyle(.quaternary.opacity(0.5)),
+                in: Capsule()
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 보드 픽커 (⌘P)
+
+    private var boardPickerOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .onTapGesture { vm.closePicker() }
+            BoardPickerCard()
+                .environmentObject(vm)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - 검색창
@@ -59,6 +124,8 @@ struct PaletteView: View {
                             item: item,
                             index: index,
                             selected: index == vm.selectedIndex,
+                            masked: vm.isMasked(item),
+                            boardColor: vm.board(for: item).flatMap { Color(hex: $0.colorHex) },
                             onTap: { vm.select(index: index) }
                         )
                         .id(index)
@@ -106,6 +173,29 @@ struct PaletteView: View {
 
     @ViewBuilder
     private func preview(for item: ClipItem) -> some View {
+        if vm.isMasked(item) && !vm.secretRevealed {
+            VStack(spacing: 10) {
+                Image(systemName: "lock.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("시크릿 항목")
+                    .font(.headline)
+                Text("⏎ 로 바로 붙여넣거나, 내용을 확인하려면 아래 버튼을 누르세요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("내용 표시") { vm.secretRevealed = true }
+                    .controlSize(.small)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 60)
+        } else {
+            unmaskedPreview(for: item)
+        }
+    }
+
+    @ViewBuilder
+    private func unmaskedPreview(for item: ClipItem) -> some View {
         switch item.kind {
         case .text:
             Text(item.text ?? "")
@@ -174,9 +264,10 @@ struct PaletteView: View {
     private var hintBar: some View {
         HStack(spacing: 14) {
             hint("↑↓", "이동")
-            hint("⏎", "붙여넣기")
+            hint("⏎", vm.directPasteEnabled ? "붙여넣기" : "복사")
             hint("⇧⏎", "복사만")
-            hint("⌘1–9", "바로 붙여넣기")
+            hint("⌘P", "보드에 넣기")
+            hint("⌘⇧[ ]", "보드 전환")
             hint("esc", "닫기")
             Spacer()
         }
@@ -203,15 +294,17 @@ private struct ResultRow: View {
     let item: ClipItem
     let index: Int
     let selected: Bool
+    let masked: Bool
+    let boardColor: Color?
     let onTap: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: item.kind.symbolName)
+            Image(systemName: masked ? "lock.fill" : item.kind.symbolName)
                 .frame(width: 16)
                 .foregroundStyle(selected ? .primary : .secondary)
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.title)
+                Text(masked ? "••••••••" : item.title)
                     .lineLimit(1)
                     .font(.callout)
                 HStack(spacing: 4) {
@@ -224,6 +317,9 @@ private struct ResultRow: View {
                 .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 0)
+            if let boardColor {
+                Circle().fill(boardColor).frame(width: 6, height: 6)
+            }
             if index < 9 {
                 Text("⌘\(index + 1)")
                     .font(.caption2.monospaced())
@@ -238,6 +334,83 @@ private struct ResultRow: View {
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+    }
+}
+
+/// ⌘P 보드 픽커 카드
+private struct BoardPickerCard: View {
+    @EnvironmentObject private var vm: PaletteViewModel
+    @FocusState private var nameFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("보드에 넣기")
+                .font(.headline)
+
+            VStack(spacing: 2) {
+                ForEach(Array(vm.pickerOptions.enumerated()), id: \.offset) { index, option in
+                    optionRow(option, index: index)
+                }
+            }
+
+            if vm.creatingBoard {
+                Divider()
+                HStack(spacing: 8) {
+                    TextField("새 보드 이름", text: $vm.newBoardName)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($nameFocused)
+                        .onSubmit { vm.confirmCreateBoard() }
+                    Toggle("시크릿", isOn: $vm.newBoardSecret)
+                        .toggleStyle(.checkbox)
+                        .font(.caption)
+                }
+                Text("⏎ 만들기 · esc 취소")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(16)
+        .frame(width: 300)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        .onChange(of: vm.creatingBoard) { _, creating in
+            if creating { nameFocused = true }
+        }
+    }
+
+    private func optionRow(_ option: PaletteViewModel.PickerOption, index: Int) -> some View {
+        let selected = index == vm.pickerIndex && !vm.creatingBoard
+        return HStack(spacing: 8) {
+            switch option {
+            case .board(let board):
+                Circle()
+                    .fill(Color(hex: board.colorHex) ?? .gray)
+                    .frame(width: 8, height: 8)
+                if board.isSecret {
+                    Image(systemName: "lock.fill").font(.system(size: 9))
+                }
+                Text(board.name)
+            case .removeFromBoard:
+                Image(systemName: "minus.circle").foregroundStyle(.red)
+                Text(option.label)
+            case .createNew:
+                Image(systemName: "plus.circle")
+                Text(option.label)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.callout)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            vm.pickerIndex = index
+            vm.pickerCommit()
+        }
     }
 }
 
