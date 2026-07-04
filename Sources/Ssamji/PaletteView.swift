@@ -174,8 +174,9 @@ struct PaletteView: View {
     private var hintBar: some View {
         HStack(spacing: 14) {
             hint("↑↓", "이동")
-            hint("⏎", "클립보드로 복사")
-            hint("⌘1–9", "바로 선택")
+            hint("⏎", "붙여넣기")
+            hint("⇧⏎", "복사만")
+            hint("⌘1–9", "바로 붙여넣기")
             hint("esc", "닫기")
             Spacer()
         }

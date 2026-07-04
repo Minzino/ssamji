@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/쌈지.app"
-VERSION="0.2.0"
+VERSION="0.3.0"
 
 cd "$ROOT"
 swift build -c release
@@ -33,5 +33,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-codesign --force --sign - "$APP"
+# 고정 identity 로 서명해야 TCC 권한(손쉬운 사용 등)이 재빌드 후에도 유지된다.
+# "Ssamji Dev Signing" 자체 서명 인증서가 없으면 ad-hoc 으로 폴백 (이 경우 재빌드마다 권한 재부여 필요).
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "Ssamji Dev Signing"; then
+    codesign --force --sign "Ssamji Dev Signing" "$APP"
+else
+    echo "⚠️  'Ssamji Dev Signing' 인증서 없음 — ad-hoc 서명으로 폴백"
+    codesign --force --sign - "$APP"
+fi
 echo "✅ 번들 완료: $APP"
