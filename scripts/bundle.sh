@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/쌈지.app"
-VERSION="0.6.0"
+VERSION="0.7.0"
 
 cd "$ROOT"
 swift build -c release
@@ -13,6 +13,7 @@ swift build -c release
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/.build/release/Ssamji" "$APP/Contents/MacOS/Ssamji"
+cp "$ROOT/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -27,6 +28,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key><string>${VERSION}</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>15.4</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
 </dict>
@@ -42,3 +44,7 @@ else
     codesign --force --sign - "$APP"
 fi
 echo "✅ 번들 완료: $APP"
+
+# /Applications 에 정식 설치
+ditto "$APP" "/Applications/쌈지.app"
+echo "✅ 설치 완료: /Applications/쌈지.app"

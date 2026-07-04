@@ -33,6 +33,39 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// 수집 제외 앱 (번들 ID). 이 앱들에서 복사한 내용은 히스토리에 쌓지 않는다.
+    @Published var excludedApps: [String] = UserDefaults.standard.stringArray(forKey: "excludedApps") ?? [] {
+        didSet {
+            UserDefaults.standard.set(excludedApps, forKey: "excludedApps")
+            palette?.viewModel.excludedApps = excludedApps
+        }
+    }
+
+    /// 제외 토글 (팔레트 ⌘E / 프리뷰 체크박스)
+    func toggleExcludedApp(bundleID: String) {
+        if excludedApps.contains(bundleID) {
+            removeExcludedApp(bundleID)
+        } else {
+            excludeApp(bundleID: bundleID)
+        }
+    }
+
+    func excludeApp(bundleID: String) {
+        guard !excludedApps.contains(bundleID) else { return }
+        excludedApps.append(bundleID)
+    }
+
+    func removeExcludedApp(_ bundleID: String) {
+        excludedApps.removeAll { $0 == bundleID }
+    }
+
+    static func appDisplayName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return bundleID
+        }
+        return FileManager.default.displayName(atPath: url.path)
+    }
+
     private var lastCleanupAt = Date.distantPast
 
     private func runCleanup() {
@@ -74,7 +107,16 @@ final class AppState: ObservableObject {
             controller.viewModel.onCommit = { [weak self] item, action in
                 self?.commit(item, action: action)
             }
+            controller.viewModel.onCommitText = { [weak self] text, action in
+                self?.commitText(text, action: action)
+            }
+            controller.viewModel.onExcludeApp = { [weak self] item in
+                if let bundleID = item.sourceAppBundleID {
+                    self?.toggleExcludedApp(bundleID: bundleID)
+                }
+            }
             controller.viewModel.directPasteEnabled = directPasteEnabled
+            controller.viewModel.excludedApps = excludedApps
             palette = controller
         }
 
@@ -150,6 +192,7 @@ final class AppState: ObservableObject {
     private func capture(from pasteboard: NSPasteboard) {
         guard let store else { return }
         guard let item = PasteboardReader.capture(from: pasteboard, blobsDirectory: store.blobsDirectory) else { return }
+        if let bundleID = item.sourceAppBundleID, excludedApps.contains(bundleID) { return }
         do {
             try store.save(item)
             refresh()
@@ -180,6 +223,18 @@ final class AppState: ObservableObject {
             _ = try? store.save(bumped)
         }
         refresh()
+    }
+
+    /// 변환된 텍스트 붙여넣기 — 히스토리에 새 항목으로 저장하지 않는다
+    private func commitText(_ text: String, action: PaletteViewModel.CommitAction) {
+        palette?.hide()
+        let pb = NSPasteboard.general
+        watcher.ignoreNextChange = true
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        if action == .paste && directPasteEnabled {
+            PasteEngine.pasteToFrontmostApp()
+        }
     }
 
     private func writeToPasteboard(_ item: ClipItem) {

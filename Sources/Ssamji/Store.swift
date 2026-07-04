@@ -113,16 +113,18 @@ final class Store {
         }
     }
 
-    /// 목록 조회: 쿼리가 비면 최근순, 있으면 FTS5 전문검색. boardID 로 핀보드 필터링.
+    /// 목록 조회: 쿼리가 비면 최근순, 있으면 FTS5 전문검색.
+    /// 보드는 독립 공간 — 보드 탭(boardID != nil)에서는 히스토리 숨김(deletedAt)과 무관하게 소속 항목을 보여준다.
     func items(matching query: String, boardID: Int64?, limit: Int = 50) throws -> [ClipItem] {
         try dbQueue.read { db in
             if query.isEmpty {
                 var request = ClipItem
-                    .filter(Column("deletedAt") == nil)
                     .order(Column("updatedAt").desc)
                     .limit(limit)
                 if let boardID {
                     request = request.filter(Column("boardId") == boardID)
+                } else {
+                    request = request.filter(Column("deletedAt") == nil)
                 }
                 return try request.fetchAll(db)
             }
@@ -131,16 +133,27 @@ final class Store {
             var sql = """
                 SELECT items.* FROM items
                 JOIN items_fts ON items_fts.rowid = items.id
-                WHERE items_fts MATCH ? AND items.deletedAt IS NULL
+                WHERE items_fts MATCH ?
                 """
             var arguments: [DatabaseValueConvertible?] = [pattern]
             if let boardID {
                 sql += " AND items.boardId = ?"
                 arguments.append(boardID)
+            } else {
+                sql += " AND items.deletedAt IS NULL"
             }
             sql += " ORDER BY items.updatedAt DESC LIMIT ?"
             arguments.append(limit)
             return try ClipItem.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+        }
+    }
+
+    /// 히스토리에서만 숨김 (보드 공간에는 유지). 같은 내용을 다시 복사하면 히스토리로 복귀한다.
+    func hideFromHistory(_ item: ClipItem) throws {
+        try dbQueue.write { db in
+            var updated = item
+            updated.deletedAt = Date()
+            try updated.update(db)
         }
     }
 
@@ -209,6 +222,16 @@ final class Store {
             var updated = board
             updated.isSecret = isSecret
             try updated.update(db)
+        }
+    }
+
+    /// 항목 삭제 (이미지 블롭 파일 동반 삭제 — checksum UNIQUE 라 1:1)
+    func delete(_ item: ClipItem) throws {
+        _ = try dbQueue.write { db -> Bool in
+            if let path = item.imagePath {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+            return try item.delete(db)
         }
     }
 

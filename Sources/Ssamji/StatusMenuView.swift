@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 메뉴바 아이콘 클릭 시 뜨는 상태 창.
 /// M1: 수집 현황(항목 수, 최근 5개) + 권한 온보딩. M2 에서 본격 팔레트 UI 로 대체된다.
@@ -16,11 +17,13 @@ struct StatusMenuView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "doc.on.clipboard.fill")
+            HStack(spacing: 6) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 20, height: 20)
                 Text("쌈지").font(.headline)
                 Spacer()
-                Text("v0.6.0 · M6").font(.caption).foregroundStyle(.secondary)
+                Text("v0.7.0 · M5").font(.caption).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {
@@ -132,6 +135,46 @@ struct StatusMenuView: View {
 
             Divider()
 
+            VStack(alignment: .leading, spacing: 4) {
+                Text("수집 제외 앱")
+                    .font(.caption)
+                    .fontWeight(.medium)
+
+                if state.excludedApps.isEmpty {
+                    Text("제외된 앱이 없습니다. 아래에서 추가하거나 팔레트에서 ⌘E.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    ForEach(state.excludedApps, id: \.self) { bundleID in
+                        HStack {
+                            Circle().fill(.orange).frame(width: 6, height: 6)
+                            Text(AppState.appDisplayName(for: bundleID))
+                                .font(.caption)
+                                .lineLimit(1)
+                            Spacer()
+                            Button("해제") { state.removeExcludedApp(bundleID) }
+                                .buttonStyle(.borderless)
+                                .font(.caption2)
+                        }
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Menu("＋ 실행 중인 앱에서") {
+                        ForEach(runningApps, id: \.bundleID) { app in
+                            Button(app.name) { state.excludeApp(bundleID: app.bundleID) }
+                        }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    Button("파일에서 선택…") { chooseAppFromFinder() }
+                        .buttonStyle(.borderless)
+                }
+                .font(.caption2)
+            }
+
+            Divider()
+
             HStack {
                 Button("팔레트 열기 (⌘⇧V)") { state.togglePalette() }
                 Button("새로고침") {
@@ -184,5 +227,32 @@ struct StatusMenuView: View {
     private func refreshPermissions() {
         pasteboard = Permissions.pasteboardStatus()
         accessibility = Permissions.accessibilityGranted()
+    }
+
+    /// 실행 중인 일반 앱 목록 (이미 제외된 앱과 쌈지 자신은 빼고)
+    private var runningApps: [(name: String, bundleID: String)] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap { app -> (name: String, bundleID: String)? in
+                guard let bundleID = app.bundleIdentifier,
+                      bundleID != Bundle.main.bundleIdentifier,
+                      !state.excludedApps.contains(bundleID) else { return nil }
+                return (app.localizedName ?? bundleID, bundleID)
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private func chooseAppFromFinder() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK,
+           let url = panel.url,
+           let bundleID = Bundle(url: url)?.bundleIdentifier {
+            state.excludeApp(bundleID: bundleID)
+        }
     }
 }

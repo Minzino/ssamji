@@ -38,6 +38,8 @@ final class PaletteViewModel: ObservableObject {
     @Published var selectedBoardID: Int64?
     @Published var secretRevealed = false
     @Published var directPasteEnabled = true
+    /// 수집 제외 앱 목록 (AppState 가 미러링) — 프리뷰 체크박스 표시용
+    @Published var excludedApps: [String] = []
 
     // 보드 픽커 (⌘P)
     @Published var pickerVisible = false
@@ -50,8 +52,22 @@ final class PaletteViewModel: ObservableObject {
     @Published var renameVisible = false
     @Published var renameText = ""
 
+    // 변환 붙여넣기 (⌘T)
+    @Published var transformVisible = false
+    @Published var transformIndex = 0
+
+    // 페이스트 스택 (⌘K 담기, ⌘⏎ 순서대로 붙여넣기)
+    @Published var stack: [ClipItem] = []
+
+    // 보드 삭제 확인 (⌘⇧⌫)
+    @Published var confirmingBoardDelete = false
+
     private let store: Store
     var onCommit: ((ClipItem, CommitAction) -> Void)?
+    /// 변환/스택 텍스트를 붙여넣을 때 (원본 항목은 저장하지 않음)
+    var onCommitText: ((String, CommitAction) -> Void)?
+    /// 선택 항목의 출처 앱을 수집 제외 목록에 추가 (⌘E)
+    var onExcludeApp: ((ClipItem) -> Void)?
 
     init(store: Store) {
         self.store = store
@@ -59,6 +75,11 @@ final class PaletteViewModel: ObservableObject {
 
     var selectedItem: ClipItem? {
         results.indices.contains(selectedIndex) ? results[selectedIndex] : nil
+    }
+
+    /// 현재 선택된 보드 탭 (전체 탭이면 nil)
+    var selectedBoard: Board? {
+        boards.first { $0.id == selectedBoardID }
     }
 
     func board(for item: ClipItem) -> Board? {
@@ -74,6 +95,8 @@ final class PaletteViewModel: ObservableObject {
     func reset() {
         reloadBoards()
         query = ""
+        stack = []
+        confirmingBoardDelete = false
         search()
     }
 
@@ -128,6 +151,73 @@ final class PaletteViewModel: ObservableObject {
         try? store.setBoardSecret(board, isSecret: !board.isSecret)
         reloadBoards()
         reload(selecting: selectedItem?.uuid)
+    }
+
+    // MARK: - 보드 삭제 (⌘⇧⌫, 확인 후 실행)
+
+    func requestDeleteCurrentBoard() {
+        guard selectedBoard != nil else { return }
+        confirmingBoardDelete = true
+    }
+
+    func confirmDeleteCurrentBoard() {
+        if let board = selectedBoard {
+            deleteBoard(board)
+        }
+        confirmingBoardDelete = false
+    }
+
+    // MARK: - 페이스트 스택 (⌘K / ⌘⏎)
+
+    /// 스택에 담을 수 있는 항목인가 (텍스트로 이어붙일 수 있는 종류만)
+    func isStackable(_ item: ClipItem) -> Bool {
+        stackText(for: item) != nil
+    }
+
+    func stackIndex(of item: ClipItem) -> Int? {
+        stack.firstIndex { $0.uuid == item.uuid }
+    }
+
+    func toggleStack() {
+        guard let item = selectedItem else { return }
+        if let index = stackIndex(of: item) {
+            stack.remove(at: index)
+        } else if isStackable(item) {
+            stack.append(item)
+        }
+    }
+
+    func commitStack(action: CommitAction = .paste) {
+        let texts = stack.compactMap(stackText(for:))
+        guard !texts.isEmpty else { return }
+        stack = []
+        onCommitText?(texts.joined(separator: "\n"), action)
+    }
+
+    private func stackText(for item: ClipItem) -> String? {
+        switch item.kind {
+        case .text, .file: return item.text
+        case .link: return item.url ?? item.text
+        case .color: return item.colorHex ?? item.text
+        case .image: return nil
+        }
+    }
+
+    // MARK: - 앱 수집 제외 (⌘E, 프리뷰 체크박스) — 토글
+
+    func isAppExcluded(_ item: ClipItem) -> Bool {
+        guard let bundleID = item.sourceAppBundleID else { return false }
+        return excludedApps.contains(bundleID)
+    }
+
+    func excludeSelectedItemApp() {
+        guard let item = selectedItem, item.sourceAppBundleID != nil else { return }
+        onExcludeApp?(item)
+    }
+
+    func toggleExcludeApp(for item: ClipItem) {
+        guard item.sourceAppBundleID != nil else { return }
+        onExcludeApp?(item)
     }
 
     // MARK: - 선택/확정
@@ -221,6 +311,66 @@ final class PaletteViewModel: ObservableObject {
            (item.customTitle ?? "").isEmpty {
             openRename()
         }
+    }
+
+    // MARK: - 삭제 (⌘⌫)
+
+    /// 전체 탭: 보드 소속 항목은 히스토리에서만 숨김(보드 공간 유지), 미소속은 완전 삭제.
+    /// 보드 탭: 완전 삭제 (보드에서 빼기만 하려면 ⌘P → 보드에서 제거).
+    func deleteSelection() {
+        guard let item = selectedItem else { return }
+        if selectedBoardID == nil, item.boardId != nil {
+            try? store.hideFromHistory(item)
+        } else {
+            try? store.delete(item)
+        }
+        let previousIndex = selectedIndex
+        reload()
+        selectedIndex = min(previousIndex, max(results.count - 1, 0))
+    }
+
+    // MARK: - 변환 붙여넣기 (⌘T)
+
+    /// 텍스트 계열 항목에만 적용, JSON 정리는 유효한 JSON 일 때만 노출
+    var transformOptions: [PasteTransform] {
+        guard let item = selectedItem, let text = transformSourceText(item) else { return [] }
+        return PasteTransform.allCases.filter { $0.apply(to: text) != nil }
+    }
+
+    private func transformSourceText(_ item: ClipItem) -> String? {
+        switch item.kind {
+        case .text, .link, .color: return item.text ?? item.url ?? item.colorHex
+        case .image, .file: return nil
+        }
+    }
+
+    func openTransform() {
+        guard !transformOptions.isEmpty else { return }
+        transformIndex = 0
+        transformVisible = true
+    }
+
+    func closeTransform() {
+        transformVisible = false
+    }
+
+    func transformMove(by delta: Int) {
+        let count = transformOptions.count
+        guard count > 0 else { return }
+        transformIndex = min(max(transformIndex + delta, 0), count - 1)
+    }
+
+    func transformCommit(action: CommitAction = .paste) {
+        guard let item = selectedItem,
+              let text = transformSourceText(item),
+              transformOptions.indices.contains(transformIndex),
+              let transformed = transformOptions[transformIndex].apply(to: text)
+        else {
+            closeTransform()
+            return
+        }
+        closeTransform()
+        onCommitText?(transformed, action)
     }
 
     // MARK: - 라벨 (⌘R)

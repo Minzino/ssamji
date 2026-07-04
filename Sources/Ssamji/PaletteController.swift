@@ -31,13 +31,25 @@ final class PaletteController {
         let panel = ensurePanel()
         viewModel.reset()
         center(panel)
+        panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.13
+            panel.animator().alphaValue = 1
+        }
         installKeyMonitor()
     }
 
     func hide() {
         removeKeyMonitor()
-        panel?.orderOut(nil)
+        guard let panel, panel.isVisible else { return }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.1
+            panel.animator().alphaValue = 0
+        }, completionHandler: {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+        })
     }
 
     // MARK: - Panel
@@ -144,6 +156,40 @@ final class PaletteController {
             return handlePicker(event)
         }
 
+        // 보드 삭제 확인 (⌘⇧⌫)
+        if viewModel.confirmingBoardDelete {
+            switch event.keyCode {
+            case 36, 76:
+                viewModel.confirmDeleteCurrentBoard()
+                return true
+            case 53:
+                viewModel.confirmingBoardDelete = false
+                return true
+            default:
+                return true
+            }
+        }
+
+        // 변환 픽커(⌘T)
+        if viewModel.transformVisible {
+            switch event.keyCode {
+            case 53:
+                viewModel.closeTransform()
+                return true
+            case 125:
+                viewModel.transformMove(by: 1)
+                return true
+            case 126:
+                viewModel.transformMove(by: -1)
+                return true
+            case 36, 76:
+                viewModel.transformCommit(action: shift ? .copyOnly : .paste)
+                return true
+            default:
+                return true
+            }
+        }
+
         switch event.keyCode {
         case 53: // esc
             hide()
@@ -154,6 +200,9 @@ final class PaletteController {
         case 126: // up
             viewModel.moveSelection(by: -1)
             return true
+        case 36 where cmd, 76 where cmd: // ⌘⏎: 페이스트 스택 순서대로 붙여넣기
+            viewModel.commitStack(action: shift ? .copyOnly : .paste)
+            return true
         case 36, 76: // return, keypad enter — ⇧⏎ 는 복사만, ⏎ 는 다이렉트 페이스트
             let action: PaletteViewModel.CommitAction = shift ? .copyOnly : .paste
             viewModel.commitSelection(action: action)
@@ -163,6 +212,21 @@ final class PaletteController {
             return true
         case 15 where cmd: // ⌘R: 라벨 지정
             viewModel.openRename()
+            return true
+        case 17 where cmd: // ⌘T: 변환 붙여넣기
+            viewModel.openTransform()
+            return true
+        case 40 where cmd: // ⌘K: 페이스트 스택에 담기/빼기
+            viewModel.toggleStack()
+            return true
+        case 14 where cmd: // ⌘E: 이 항목의 출처 앱을 수집 제외
+            viewModel.excludeSelectedItemApp()
+            return true
+        case 51 where cmd && shift: // ⌘⇧⌫: 현재 보드 삭제 (확인 후)
+            viewModel.requestDeleteCurrentBoard()
+            return true
+        case 51 where cmd: // ⌘⌫: 항목 삭제 (전체 탭에선 보드 항목은 숨김만)
+            viewModel.deleteSelection()
             return true
         case 33 where cmd: // ⌘[ (⇧ 있어도 됨): 이전 보드
             viewModel.cycleBoard(by: -1)
