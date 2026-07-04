@@ -17,8 +17,10 @@ struct StatusMenuView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "doc.on.clipboard.fill")
+            HStack(spacing: 6) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 20, height: 20)
                 Text("쌈지").font(.headline)
                 Spacer()
                 Text("v0.7.0 · M5").font(.caption).foregroundStyle(.secondary)

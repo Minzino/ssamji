@@ -185,7 +185,7 @@ struct PaletteView: View {
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(vm.query.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.accentColor))
             TextField("쌈지 검색…", text: $vm.query)
                 .textFieldStyle(.plain)
                 .font(.title3)
@@ -367,7 +367,14 @@ struct PaletteView: View {
     private func metaBar(for item: ClipItem) -> some View {
         HStack(spacing: 10) {
             if let app = item.sourceAppName {
-                Label(app, systemImage: "app.dashed")
+                HStack(spacing: 4) {
+                    if let icon = AppIcons.icon(for: item.sourceAppBundleID) {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: 14, height: 14)
+                    }
+                    Text(app)
+                }
             }
             Label(item.createdAt.formatted(date: .abbreviated, time: .shortened), systemImage: "clock")
             Label(byteString(item.byteSize), systemImage: "externaldrive")
@@ -441,17 +448,42 @@ private struct ResultRow: View {
     let stackNumber: Int?
     let onTap: () -> Void
 
+    /// 타입별 색 — 컬러 항목은 실제 색, 나머지는 종류별 틴트
+    private var kindTint: Color {
+        if masked { return .secondary }
+        switch item.kind {
+        case .text: return .secondary
+        case .link: return .blue
+        case .image: return .purple
+        case .file: return .orange
+        case .color: return Color(hex: item.colorHex ?? "") ?? .gray
+        }
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: masked ? "lock.fill" : item.kind.symbolName)
-                .frame(width: 16)
-                .foregroundStyle(selected ? .primary : .secondary)
+            if !masked, item.kind == .color, let swatch = Color(hex: item.colorHex ?? "") {
+                Circle()
+                    .fill(swatch)
+                    .frame(width: 11, height: 11)
+                    .overlay(Circle().strokeBorder(.separator, lineWidth: 0.5))
+                    .frame(width: 16)
+            } else {
+                Image(systemName: masked ? "lock.fill" : item.kind.symbolName)
+                    .frame(width: 16)
+                    .foregroundStyle(kindTint)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 // 마스킹돼도 라벨은 보여준다 — 라벨이 없을 때만 점 처리
                 Text(masked ? (item.customTitle?.isEmpty == false ? item.customTitle! : "••••••••") : item.displayTitle)
                     .lineLimit(1)
                     .font(.callout)
                 HStack(spacing: 4) {
+                    if let icon = AppIcons.icon(for: item.sourceAppBundleID) {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: 12, height: 12)
+                    }
                     if let app = item.sourceAppName {
                         Text(app)
                     }
