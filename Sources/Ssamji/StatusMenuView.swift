@@ -6,6 +6,13 @@ struct StatusMenuView: View {
     @EnvironmentObject private var state: AppState
     @State private var pasteboard: Permissions.Status = .systemDefault
     @State private var accessibility = false
+    @State private var draftRetention: Double = 91
+
+    /// 드래그 중엔 드래프트 값, 평소엔 확정 값 표시
+    private var retentionLabel: String {
+        let days = Int(draftRetention)
+        return days > 90 ? "무제한" : "\(days)일"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -102,37 +109,25 @@ struct StatusMenuView: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
 
-            HStack {
-                Text("히스토리 보관")
-                    .font(.caption)
-                Spacer()
-                Picker("", selection: $state.retentionDays) {
-                    Text("7일").tag(7)
-                    Text("30일").tag(30)
-                    Text("90일").tag(90)
-                    Text("무제한").tag(0)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("히스토리 보관")
+                        .font(.caption)
+                    Spacer()
+                    Text(retentionLabel)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
-                .pickerStyle(.menu)
+                // 드래그 중에는 적용하지 않고, 놓는 순간에만 반영 (스쳐 지나간 값으로 삭제되는 것 방지)
+                Slider(value: $draftRetention, in: 1...91, step: 1) { editing in
+                    if !editing {
+                        state.retentionDays = draftRetention > 90 ? 0 : Int(draftRetention)
+                    }
+                }
                 .controlSize(.small)
-                .fixedSize()
-            }
-            Text("보드에 넣은 항목은 기간과 무관하게 보존됩니다.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-
-            if state.pasteImportAvailable {
-                Divider()
-                VStack(alignment: .leading, spacing: 4) {
-                    Button("Paste 2에서 가져오기 (항목·보드·라벨)") {
-                        state.runPasteImport()
-                    }
-                    .font(.caption)
-                    if let status = state.importStatus {
-                        Text(status)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Text("보드에 넣은 항목은 기간과 무관하게 보존됩니다.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
 
             Divider()
@@ -154,6 +149,7 @@ struct StatusMenuView: View {
         .onAppear {
             state.refresh()
             refreshPermissions()
+            draftRetention = state.retentionDays == 0 ? 91 : Double(state.retentionDays)
         }
     }
 
