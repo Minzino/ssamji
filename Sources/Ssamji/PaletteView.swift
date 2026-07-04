@@ -43,9 +43,16 @@ struct PaletteView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
         }
+        .overlay {
+            if vm.confirmingBoardDelete {
+                boardDeleteOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+        }
         .animation(.easeOut(duration: 0.14), value: vm.pickerVisible)
         .animation(.easeOut(duration: 0.14), value: vm.renameVisible)
         .animation(.easeOut(duration: 0.14), value: vm.transformVisible)
+        .animation(.easeOut(duration: 0.14), value: vm.confirmingBoardDelete)
         .onAppear { searchFocused = true }
         // 오버레이가 열릴 때 검색창 포커스를 명시적으로 해제해야 타이핑이 검색창으로 새지 않는다
         .onChange(of: vm.renameVisible) { _, visible in
@@ -72,6 +79,31 @@ struct PaletteView: View {
                 .onTapGesture { vm.closeTransform() }
             TransformPickerCard()
                 .environmentObject(vm)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    // MARK: - 보드 삭제 확인 (⌘⇧⌫)
+
+    private var boardDeleteOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .onTapGesture { vm.confirmingBoardDelete = false }
+            VStack(alignment: .leading, spacing: 10) {
+                Label("보드 삭제", systemImage: "trash")
+                    .font(.headline)
+                    .foregroundStyle(.red)
+                Text("'\(vm.selectedBoard?.name ?? "")' 보드를 삭제할까요?\n항목들은 삭제되지 않고 히스토리에 남습니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("⏎ 삭제 · esc 취소")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(16)
+            .frame(width: 300)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -182,6 +214,7 @@ struct PaletteView: View {
                             selected: index == vm.selectedIndex,
                             masked: vm.isMasked(item),
                             boardColor: vm.board(for: item).flatMap { Color(hex: $0.colorHex) },
+                            stackNumber: vm.stackIndex(of: item).map { $0 + 1 },
                             onTap: { vm.select(index: index) }
                         )
                         .id(index)
@@ -264,6 +297,14 @@ struct PaletteView: View {
                         .font(.system(.callout, design: .monospaced))
                         .textSelection(.enabled)
                 }
+            } else if CodeHighlighter.looksLikeCode(item.text ?? "") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("코드", systemImage: "chevron.left.forwardslash.chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(CodeHighlighter.highlight(item.text ?? ""))
+                        .textSelection(.enabled)
+                }
             } else {
                 Text(item.text ?? "")
                     .font(.system(.body, design: .monospaced))
@@ -332,12 +373,15 @@ struct PaletteView: View {
     private var hintBar: some View {
         HStack(spacing: 14) {
             hint("⏎", vm.directPasteEnabled ? "붙여넣기" : "복사")
-            hint("⇧⏎", "복사만")
+            hint("⌘K", "스택")
+            if !vm.stack.isEmpty {
+                hint("⌘⏎", "스택 \(vm.stack.count)개 붙여넣기")
+            }
             hint("⌘T", "변환")
             hint("⌘P", "보드")
             hint("⌘R", "라벨")
             hint("⌘⌫", "삭제")
-            hint("⌘[ ]", "보드 전환")
+            hint("⌘⇧⌫", "보드 삭제")
             Spacer()
         }
         .padding(.horizontal, 14)
@@ -365,6 +409,7 @@ private struct ResultRow: View {
     let selected: Bool
     let masked: Bool
     let boardColor: Color?
+    let stackNumber: Int?
     let onTap: () -> Void
 
     var body: some View {
@@ -387,6 +432,13 @@ private struct ResultRow: View {
                 .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 0)
+            if let stackNumber {
+                Text("\(stackNumber)")
+                    .font(.caption2.bold().monospacedDigit())
+                    .frame(width: 15, height: 15)
+                    .background(Color.accentColor.opacity(0.8), in: Circle())
+                    .foregroundStyle(.white)
+            }
             if let boardColor {
                 Circle().fill(boardColor).frame(width: 6, height: 6)
             }

@@ -33,6 +33,27 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// 수집 제외 앱 (번들 ID). 이 앱들에서 복사한 내용은 히스토리에 쌓지 않는다.
+    @Published var excludedApps: [String] = UserDefaults.standard.stringArray(forKey: "excludedApps") ?? [] {
+        didSet { UserDefaults.standard.set(excludedApps, forKey: "excludedApps") }
+    }
+
+    func excludeApp(bundleID: String) {
+        guard !excludedApps.contains(bundleID) else { return }
+        excludedApps.append(bundleID)
+    }
+
+    func removeExcludedApp(_ bundleID: String) {
+        excludedApps.removeAll { $0 == bundleID }
+    }
+
+    static func appDisplayName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return bundleID
+        }
+        return FileManager.default.displayName(atPath: url.path)
+    }
+
     private var lastCleanupAt = Date.distantPast
 
     private func runCleanup() {
@@ -76,6 +97,11 @@ final class AppState: ObservableObject {
             }
             controller.viewModel.onCommitText = { [weak self] text, action in
                 self?.commitText(text, action: action)
+            }
+            controller.viewModel.onExcludeApp = { [weak self] item in
+                if let bundleID = item.sourceAppBundleID {
+                    self?.excludeApp(bundleID: bundleID)
+                }
             }
             controller.viewModel.directPasteEnabled = directPasteEnabled
             palette = controller
@@ -153,6 +179,7 @@ final class AppState: ObservableObject {
     private func capture(from pasteboard: NSPasteboard) {
         guard let store else { return }
         guard let item = PasteboardReader.capture(from: pasteboard, blobsDirectory: store.blobsDirectory) else { return }
+        if let bundleID = item.sourceAppBundleID, excludedApps.contains(bundleID) { return }
         do {
             try store.save(item)
             refresh()

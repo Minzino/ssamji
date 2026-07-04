@@ -130,6 +130,26 @@ struct StatusMenuView: View {
                     .foregroundStyle(.tertiary)
             }
 
+            if !state.excludedApps.isEmpty {
+                Divider()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("수집 제외 앱 (팔레트에서 ⌘E로 추가)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    ForEach(state.excludedApps, id: \.self) { bundleID in
+                        HStack {
+                            Text(AppState.appDisplayName(for: bundleID))
+                                .font(.caption)
+                                .lineLimit(1)
+                            Spacer()
+                            Button("해제") { state.removeExcludedApp(bundleID) }
+                                .buttonStyle(.borderless)
+                                .font(.caption2)
+                        }
+                    }
+                }
+            }
+
             Divider()
 
             HStack {
