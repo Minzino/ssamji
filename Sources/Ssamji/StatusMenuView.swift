@@ -13,7 +13,7 @@ struct StatusMenuView: View {
                 Image(systemName: "doc.on.clipboard.fill")
                 Text("쌈지").font(.headline)
                 Spacer()
-                Text("v0.1.0 · M1").font(.caption).foregroundStyle(.secondary)
+                Text("v0.2.0 · M2").font(.caption).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {
@@ -86,6 +86,7 @@ struct StatusMenuView: View {
             Divider()
 
             HStack {
+                Button("팔레트 열기 (⌘⇧V)") { state.togglePalette() }
                 Button("새로고침") {
                     state.refresh()
                     refreshPermissions()

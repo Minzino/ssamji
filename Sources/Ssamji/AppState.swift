@@ -1,7 +1,13 @@
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 
-/// 앱 전역 상태: 저장소 + watcher 를 소유하고 UI 에 수집 현황을 공급한다.
+extension KeyboardShortcuts.Name {
+    /// 팔레트 토글 기본값: ⌘⇧V (Paste 2 와 충돌 시 설정에서 변경)
+    static let togglePalette = Self("togglePalette", default: .init(.v, modifiers: [.command, .shift]))
+}
+
+/// 앱 전역 상태: 저장소 + watcher + 팔레트를 소유한다.
 @MainActor
 final class AppState: ObservableObject {
     @Published var recentItems: [ClipItem] = []
@@ -10,6 +16,7 @@ final class AppState: ObservableObject {
     @Published var lastError: String?
 
     private(set) var store: Store?
+    private(set) var palette: PaletteController?
     private let watcher = ClipboardWatcher()
 
     init() {
@@ -25,8 +32,27 @@ final class AppState: ObservableObject {
         }
         watcher.start()
         watcherRunning = watcher.isRunning
+
+        if let store {
+            let controller = PaletteController(store: store)
+            controller.viewModel.onCommit = { [weak self] item in
+                self?.commit(item)
+            }
+            palette = controller
+        }
+
+        KeyboardShortcuts.onKeyUp(for: .togglePalette) { [weak self] in
+            self?.palette?.toggle()
+        }
+
         refresh()
     }
+
+    func togglePalette() {
+        palette?.toggle()
+    }
+
+    // MARK: - 수집
 
     private func capture(from pasteboard: NSPasteboard) {
         guard let store else { return }
@@ -43,5 +69,41 @@ final class AppState: ObservableObject {
         guard let store else { return }
         recentItems = (try? store.recent(limit: 5)) ?? []
         totalCount = (try? store.count()) ?? 0
+    }
+
+    // MARK: - 선택 항목을 클립보드로 (M3 에서 다이렉트 페이스트로 확장)
+
+    private func commit(_ item: ClipItem) {
+        palette?.hide()
+        writeToPasteboard(item)
+        if let store {
+            var bumped = item
+            bumped.updatedAt = Date()
+            _ = try? store.save(bumped)
+        }
+        refresh()
+    }
+
+    private func writeToPasteboard(_ item: ClipItem) {
+        let pb = NSPasteboard.general
+        watcher.ignoreNextChange = true
+        pb.clearContents()
+
+        switch item.kind {
+        case .text, .color:
+            pb.setString(item.text ?? item.colorHex ?? "", forType: .string)
+        case .link:
+            pb.setString(item.url ?? item.text ?? "", forType: .string)
+        case .image:
+            if let path = item.imagePath, let data = try? Data(contentsOf: URL(fileURLWithPath: path)) {
+                pb.setData(data, forType: .png)
+            }
+        case .file:
+            if let json = item.fileURLs?.data(using: .utf8),
+               let paths = try? JSONDecoder().decode([String].self, from: json) {
+                let urls = paths.map { URL(fileURLWithPath: $0) as NSURL }
+                pb.writeObjects(urls)
+            }
+        }
     }
 }
