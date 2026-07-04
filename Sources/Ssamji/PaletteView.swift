@@ -217,6 +217,7 @@ struct PaletteView: View {
                             stackNumber: vm.stackIndex(of: item).map { $0 + 1 },
                             onTap: { vm.select(index: index) }
                         )
+                        .equatable()
                         .id(index)
                     }
                 }
@@ -443,7 +444,9 @@ struct PaletteView: View {
 }
 
 /// 결과 리스트의 행. selected 를 값으로 받아 선택 변화가 확실히 다시 그려지게 한다.
-private struct ResultRow: View {
+/// Equatable 구현: onTap 클로저가 SwiftUI 의 자동 비교를 막아 매 키 입력마다
+/// 50행 전부가 다시 그려지는 것을 방지 — 실제 바뀐 행만 리렌더링된다.
+private struct ResultRow: View, Equatable {
     let item: ClipItem
     let index: Int
     let selected: Bool
@@ -451,6 +454,18 @@ private struct ResultRow: View {
     let boardColor: Color?
     let stackNumber: Int?
     let onTap: () -> Void
+
+    static func == (lhs: ResultRow, rhs: ResultRow) -> Bool {
+        lhs.item.uuid == rhs.item.uuid &&
+        lhs.item.updatedAt == rhs.item.updatedAt &&
+        lhs.item.customTitle == rhs.item.customTitle &&
+        lhs.item.boardId == rhs.item.boardId &&
+        lhs.index == rhs.index &&
+        lhs.selected == rhs.selected &&
+        lhs.masked == rhs.masked &&
+        lhs.boardColor == rhs.boardColor &&
+        lhs.stackNumber == rhs.stackNumber
+    }
 
     /// 타입별 색 — 컬러 항목은 실제 색, 나머지는 종류별 틴트
     private var kindTint: Color {
