@@ -50,8 +50,14 @@ final class PaletteViewModel: ObservableObject {
     @Published var renameVisible = false
     @Published var renameText = ""
 
+    // 변환 붙여넣기 (⌘T)
+    @Published var transformVisible = false
+    @Published var transformIndex = 0
+
     private let store: Store
     var onCommit: ((ClipItem, CommitAction) -> Void)?
+    /// 변환된 텍스트를 붙여넣을 때 (원본 항목은 저장하지 않음)
+    var onCommitText: ((String, CommitAction) -> Void)?
 
     init(store: Store) {
         self.store = store
@@ -221,6 +227,60 @@ final class PaletteViewModel: ObservableObject {
            (item.customTitle ?? "").isEmpty {
             openRename()
         }
+    }
+
+    // MARK: - 삭제 (⌘⌫)
+
+    func deleteSelection() {
+        guard let item = selectedItem else { return }
+        try? store.delete(item)
+        let previousIndex = selectedIndex
+        reload()
+        selectedIndex = min(previousIndex, max(results.count - 1, 0))
+    }
+
+    // MARK: - 변환 붙여넣기 (⌘T)
+
+    /// 텍스트 계열 항목에만 적용, JSON 정리는 유효한 JSON 일 때만 노출
+    var transformOptions: [PasteTransform] {
+        guard let item = selectedItem, let text = transformSourceText(item) else { return [] }
+        return PasteTransform.allCases.filter { $0.apply(to: text) != nil }
+    }
+
+    private func transformSourceText(_ item: ClipItem) -> String? {
+        switch item.kind {
+        case .text, .link, .color: return item.text ?? item.url ?? item.colorHex
+        case .image, .file: return nil
+        }
+    }
+
+    func openTransform() {
+        guard !transformOptions.isEmpty else { return }
+        transformIndex = 0
+        transformVisible = true
+    }
+
+    func closeTransform() {
+        transformVisible = false
+    }
+
+    func transformMove(by delta: Int) {
+        let count = transformOptions.count
+        guard count > 0 else { return }
+        transformIndex = min(max(transformIndex + delta, 0), count - 1)
+    }
+
+    func transformCommit(action: CommitAction = .paste) {
+        guard let item = selectedItem,
+              let text = transformSourceText(item),
+              transformOptions.indices.contains(transformIndex),
+              let transformed = transformOptions[transformIndex].apply(to: text)
+        else {
+            closeTransform()
+            return
+        }
+        closeTransform()
+        onCommitText?(transformed, action)
     }
 
     // MARK: - 라벨 (⌘R)

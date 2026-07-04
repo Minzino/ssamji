@@ -1,0 +1,74 @@
+import Foundation
+
+/// ⌘T 변환 붙여넣기 — 텍스트 항목을 변환해서 붙여넣는다 (원본은 그대로 보존).
+enum PasteTransform: CaseIterable {
+    case uppercase
+    case lowercase
+    case trimmed
+    case slug
+    case snake
+    case jsonPretty
+
+    var label: String {
+        switch self {
+        case .uppercase: return "대문자로 (UPPERCASE)"
+        case .lowercase: return "소문자로 (lowercase)"
+        case .trimmed: return "공백 정리 (trim)"
+        case .slug: return "슬러그 (kebab-case)"
+        case .snake: return "스네이크 (snake_case)"
+        case .jsonPretty: return "JSON 정리 (pretty print)"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .uppercase: return "textformat.size.larger"
+        case .lowercase: return "textformat.size.smaller"
+        case .trimmed: return "scissors"
+        case .slug: return "minus"
+        case .snake: return "underline"
+        case .jsonPretty: return "curlybraces"
+        }
+    }
+
+    /// 변환 결과. 적용 불가(예: JSON 이 아닌데 jsonPretty)면 nil.
+    func apply(to text: String) -> String? {
+        switch self {
+        case .uppercase:
+            return text.uppercased()
+        case .lowercase:
+            return text.lowercased()
+        case .trimmed:
+            // 앞뒤 공백 제거 + 연속 공백/개행 하나로
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        case .slug:
+            return Self.tokenize(text).joined(separator: "-")
+        case .snake:
+            return Self.tokenize(text).joined(separator: "_")
+        case .jsonPretty:
+            return Self.prettyJSON(text)
+        }
+    }
+
+    /// 소문자 토큰화 — 영숫자/한글만 남기고 나머지는 구분자로
+    private static func tokenize(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.union(
+                CharacterSet(charactersIn: "가"..."힣")).inverted)
+            .filter { !$0.isEmpty }
+    }
+
+    static func prettyJSON(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("{") || trimmed.hasPrefix("[") else { return nil }
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let pretty = try? JSONSerialization.data(
+                withJSONObject: object,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+              )
+        else { return nil }
+        return String(data: pretty, encoding: .utf8)
+    }
+}

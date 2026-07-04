@@ -212,6 +212,16 @@ final class Store {
         }
     }
 
+    /// 항목 삭제 (이미지 블롭 파일 동반 삭제 — checksum UNIQUE 라 1:1)
+    func delete(_ item: ClipItem) throws {
+        _ = try dbQueue.write { db -> Bool in
+            if let path = item.imagePath {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+            return try item.delete(db)
+        }
+    }
+
     func setCustomTitle(_ title: String?, for item: ClipItem) throws {
         try dbQueue.write { db in
             var updated = item

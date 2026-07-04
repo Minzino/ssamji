@@ -28,13 +28,24 @@ struct PaletteView: View {
         .overlay {
             if vm.pickerVisible {
                 boardPickerOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
         }
         .overlay {
             if vm.renameVisible {
                 renameOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
         }
+        .overlay {
+            if vm.transformVisible {
+                transformOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+        }
+        .animation(.easeOut(duration: 0.14), value: vm.pickerVisible)
+        .animation(.easeOut(duration: 0.14), value: vm.renameVisible)
+        .animation(.easeOut(duration: 0.14), value: vm.transformVisible)
         .onAppear { searchFocused = true }
         // 오버레이가 열릴 때 검색창 포커스를 명시적으로 해제해야 타이핑이 검색창으로 새지 않는다
         .onChange(of: vm.renameVisible) { _, visible in
@@ -51,6 +62,18 @@ struct PaletteView: View {
                 searchFocused = true
             }
         }
+    }
+
+    // MARK: - 변환 붙여넣기 (⌘T)
+
+    private var transformOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .onTapGesture { vm.closeTransform() }
+            TransformPickerCard()
+                .environmentObject(vm)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - 라벨 입력 (⌘R)
@@ -231,9 +254,21 @@ struct PaletteView: View {
     private func unmaskedPreview(for item: ClipItem) -> some View {
         switch item.kind {
         case .text:
-            Text(item.text ?? "")
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
+            // 유효한 JSON 이면 자동으로 정리해서 보여준다
+            if let pretty = PasteTransform.prettyJSON(item.text ?? "") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("JSON", systemImage: "curlybraces")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(pretty)
+                        .font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            } else {
+                Text(item.text ?? "")
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+            }
         case .link:
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: "link.circle.fill")
@@ -296,13 +331,13 @@ struct PaletteView: View {
 
     private var hintBar: some View {
         HStack(spacing: 14) {
-            hint("↑↓", "이동")
             hint("⏎", vm.directPasteEnabled ? "붙여넣기" : "복사")
             hint("⇧⏎", "복사만")
+            hint("⌘T", "변환")
             hint("⌘P", "보드")
             hint("⌘R", "라벨")
+            hint("⌘⌫", "삭제")
             hint("⌘[ ]", "보드 전환")
-            hint("esc", "닫기")
             Spacer()
         }
         .padding(.horizontal, 14)
@@ -367,8 +402,52 @@ private struct ResultRow: View {
             selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
             in: RoundedRectangle(cornerRadius: 7)
         )
+        .animation(.easeOut(duration: 0.1), value: selected)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+    }
+}
+
+/// ⌘T 변환 픽커 카드
+private struct TransformPickerCard: View {
+    @EnvironmentObject private var vm: PaletteViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("변환해서 붙여넣기")
+                .font(.headline)
+            VStack(spacing: 2) {
+                ForEach(Array(vm.transformOptions.enumerated()), id: \.offset) { index, transform in
+                    let selected = index == vm.transformIndex
+                    HStack(spacing: 8) {
+                        Image(systemName: transform.symbolName)
+                            .frame(width: 16)
+                            .foregroundStyle(.secondary)
+                        Text(transform.label)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.callout)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        vm.transformIndex = index
+                        vm.transformCommit()
+                    }
+                }
+            }
+            Text("⏎ 붙여넣기 · ⇧⏎ 복사만 · esc 취소 (원본은 그대로 보존)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(width: 320)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
     }
 }
 

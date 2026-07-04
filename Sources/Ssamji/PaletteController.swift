@@ -31,13 +31,25 @@ final class PaletteController {
         let panel = ensurePanel()
         viewModel.reset()
         center(panel)
+        panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.13
+            panel.animator().alphaValue = 1
+        }
         installKeyMonitor()
     }
 
     func hide() {
         removeKeyMonitor()
-        panel?.orderOut(nil)
+        guard let panel, panel.isVisible else { return }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.1
+            panel.animator().alphaValue = 0
+        }, completionHandler: {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+        })
     }
 
     // MARK: - Panel
@@ -144,6 +156,26 @@ final class PaletteController {
             return handlePicker(event)
         }
 
+        // 변환 픽커(⌘T)
+        if viewModel.transformVisible {
+            switch event.keyCode {
+            case 53:
+                viewModel.closeTransform()
+                return true
+            case 125:
+                viewModel.transformMove(by: 1)
+                return true
+            case 126:
+                viewModel.transformMove(by: -1)
+                return true
+            case 36, 76:
+                viewModel.transformCommit(action: shift ? .copyOnly : .paste)
+                return true
+            default:
+                return true
+            }
+        }
+
         switch event.keyCode {
         case 53: // esc
             hide()
@@ -163,6 +195,12 @@ final class PaletteController {
             return true
         case 15 where cmd: // ⌘R: 라벨 지정
             viewModel.openRename()
+            return true
+        case 17 where cmd: // ⌘T: 변환 붙여넣기
+            viewModel.openTransform()
+            return true
+        case 51 where cmd: // ⌘⌫: 항목 삭제
+            viewModel.deleteSelection()
             return true
         case 33 where cmd: // ⌘[ (⇧ 있어도 됨): 이전 보드
             viewModel.cycleBoard(by: -1)

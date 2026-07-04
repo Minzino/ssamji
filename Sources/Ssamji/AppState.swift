@@ -74,6 +74,9 @@ final class AppState: ObservableObject {
             controller.viewModel.onCommit = { [weak self] item, action in
                 self?.commit(item, action: action)
             }
+            controller.viewModel.onCommitText = { [weak self] text, action in
+                self?.commitText(text, action: action)
+            }
             controller.viewModel.directPasteEnabled = directPasteEnabled
             palette = controller
         }
@@ -180,6 +183,18 @@ final class AppState: ObservableObject {
             _ = try? store.save(bumped)
         }
         refresh()
+    }
+
+    /// 변환된 텍스트 붙여넣기 — 히스토리에 새 항목으로 저장하지 않는다
+    private func commitText(_ text: String, action: PaletteViewModel.CommitAction) {
+        palette?.hide()
+        let pb = NSPasteboard.general
+        watcher.ignoreNextChange = true
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        if action == .paste && directPasteEnabled {
+            PasteEngine.pasteToFrontmostApp()
+        }
     }
 
     private func writeToPasteboard(_ item: ClipItem) {
