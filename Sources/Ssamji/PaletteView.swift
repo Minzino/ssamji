@@ -36,6 +36,21 @@ struct PaletteView: View {
             }
         }
         .onAppear { searchFocused = true }
+        // 오버레이가 열릴 때 검색창 포커스를 명시적으로 해제해야 타이핑이 검색창으로 새지 않는다
+        .onChange(of: vm.renameVisible) { _, visible in
+            if visible {
+                searchFocused = false
+            } else if !vm.pickerVisible {
+                searchFocused = true
+            }
+        }
+        .onChange(of: vm.pickerVisible) { _, visible in
+            if visible {
+                searchFocused = false
+            } else if !vm.renameVisible {
+                searchFocused = true
+            }
+        }
     }
 
     // MARK: - 라벨 입력 (⌘R)
@@ -393,7 +408,9 @@ private struct BoardPickerCard: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
         .onChange(of: vm.creatingBoard) { _, creating in
-            if creating { nameFocused = true }
+            if creating {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { nameFocused = true }
+            }
         }
     }
 
@@ -457,7 +474,10 @@ private struct RenameCard: View {
         .frame(width: 300)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
-        .onAppear { focused = true }
+        .onAppear {
+            // 검색창이 first responder 를 내려놓은 다음에 포커스를 잡아야 확실하다
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { focused = true }
+        }
     }
 }
 
