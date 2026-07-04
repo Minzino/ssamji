@@ -52,10 +52,16 @@ struct PaletteView: View {
     private var resultList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(Array(vm.results.enumerated()), id: \.element.id) { index, item in
-                        row(item, index: index)
-                            .id(index)
+                // Lazy 컨테이너는 selected 변화 전파를 건너뛸 수 있어 일반 VStack 사용 (결과는 최대 50개)
+                VStack(spacing: 2) {
+                    ForEach(Array(vm.results.enumerated()), id: \.offset) { index, item in
+                        ResultRow(
+                            item: item,
+                            index: index,
+                            selected: index == vm.selectedIndex,
+                            onTap: { vm.select(index: index) }
+                        )
+                        .id(index)
                     }
                 }
                 .padding(6)
@@ -74,43 +80,6 @@ struct PaletteView: View {
                 }
             }
         }
-    }
-
-    @ViewBuilder
-    private func row(_ item: ClipItem, index: Int) -> some View {
-        let selected = index == vm.selectedIndex
-        HStack(spacing: 8) {
-            Image(systemName: item.kind.symbolName)
-                .frame(width: 16)
-                .foregroundStyle(selected ? .primary : .secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.title)
-                    .lineLimit(1)
-                    .font(.callout)
-                HStack(spacing: 4) {
-                    if let app = item.sourceAppName {
-                        Text(app)
-                    }
-                    Text(item.updatedAt, format: .relative(presentation: .named))
-                }
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            }
-            Spacer(minLength: 0)
-            if index < 9 {
-                Text("⌘\(index + 1)")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.quaternary)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(
-            selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
-            in: RoundedRectangle(cornerRadius: 7)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { vm.select(index: index) }
     }
 
     // MARK: - 프리뷰
@@ -225,6 +194,49 @@ struct PaletteView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+/// 결과 리스트의 행. selected 를 값으로 받아 선택 변화가 확실히 다시 그려지게 한다.
+private struct ResultRow: View {
+    let item: ClipItem
+    let index: Int
+    let selected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: item.kind.symbolName)
+                .frame(width: 16)
+                .foregroundStyle(selected ? .primary : .secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title)
+                    .lineLimit(1)
+                    .font(.callout)
+                HStack(spacing: 4) {
+                    if let app = item.sourceAppName {
+                        Text(app)
+                    }
+                    Text(item.updatedAt, format: .relative(presentation: .named))
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+            if index < 9 {
+                Text("⌘\(index + 1)")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.quaternary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
+            in: RoundedRectangle(cornerRadius: 7)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
     }
 }
 
