@@ -124,6 +124,12 @@ final class PaletteViewModel: ObservableObject {
         search()
     }
 
+    func toggleBoardSecret(_ board: Board) {
+        try? store.setBoardSecret(board, isSecret: !board.isSecret)
+        reloadBoards()
+        reload(selecting: selectedItem?.uuid)
+    }
+
     // MARK: - 선택/확정
 
     func moveSelection(by delta: Int) {

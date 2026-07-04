@@ -180,6 +180,14 @@ final class Store {
         }
     }
 
+    func setBoardSecret(_ board: Board, isSecret: Bool) throws {
+        try dbQueue.write { db in
+            var updated = board
+            updated.isSecret = isSecret
+            try updated.update(db)
+        }
+    }
+
     func setCustomTitle(_ title: String?, for item: ClipItem) throws {
         try dbQueue.write { db in
             var updated = item

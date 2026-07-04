@@ -93,13 +93,13 @@ enum PasteboardReader {
         return nil
     }
 
-    private static func isColorHex(_ s: String) -> Bool {
+    static func isColorHex(_ s: String) -> Bool {
         let body = s.hasPrefix("#") ? String(s.dropFirst()) : s
         guard [3, 6, 8].contains(body.count), s.hasPrefix("#") || body.count == 6 else { return false }
         return body.allSatisfy(\.isHexDigit)
     }
 
-    private static func sha256(_ data: Data) -> String {
+    static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }

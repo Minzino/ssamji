@@ -79,6 +79,7 @@ struct PaletteView: View {
                         id: board.id
                     )
                     .contextMenu {
+                        Button(board.isSecret ? "시크릿 해제" : "시크릿으로 전환") { vm.toggleBoardSecret(board) }
                         Button("보드 삭제", role: .destructive) { vm.deleteBoard(board) }
                     }
                 }

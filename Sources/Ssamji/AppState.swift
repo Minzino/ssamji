@@ -1,5 +1,6 @@
 import AppKit
 import KeyboardShortcuts
+import ServiceManagement
 import SwiftUI
 
 extension KeyboardShortcuts.Name {
@@ -55,6 +56,61 @@ final class AppState: ObservableObject {
         }
 
         refresh()
+
+        // 검증용 CLI 플래그: 실행 파일을 직접 돌릴 때 임포트를 트리거
+        if CommandLine.arguments.contains("--import-paste") {
+            runPasteImport()
+        }
+    }
+
+    // MARK: - Paste 2 이주
+
+    @Published var importStatus: String?
+
+    var pasteImportAvailable: Bool { PasteImporter.isAvailable }
+
+    func runPasteImport() {
+        guard let store, importStatus != "가져오는 중…" else { return }
+        importStatus = "가져오는 중…"
+        Task.detached { [weak self] in
+            let outcome: String
+            do {
+                let result = try PasteImporter.run(into: store)
+                outcome = result.summary
+            } catch {
+                outcome = "실패: \(error.localizedDescription)"
+            }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.importStatus = outcome
+                self.finishImport()
+                print("[PasteImporter] \(outcome)")
+            }
+        }
+    }
+
+    private func finishImport() {
+        refresh()
+        palette?.viewModel.reloadBoards()
+        palette?.viewModel.search()
+    }
+
+    // MARK: - 로그인 시 시작
+
+    var launchAtLogin: Bool {
+        get { SMAppService.mainApp.status == .enabled }
+        set {
+            do {
+                if newValue {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                lastError = "로그인 시작 설정 실패: \(error.localizedDescription)"
+            }
+            objectWillChange.send()
+        }
     }
 
     func togglePalette() {
