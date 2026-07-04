@@ -300,7 +300,7 @@ struct PaletteView: View {
             hint("⇧⏎", "복사만")
             hint("⌘P", "보드")
             hint("⌘R", "라벨")
-            hint("⌘⇧[ ]", "보드 전환")
+            hint("⌘[ ]", "보드 전환")
             hint("esc", "닫기")
             Spacer()
         }
@@ -398,7 +398,7 @@ private struct BoardPickerCard: View {
                         .toggleStyle(.checkbox)
                         .font(.caption)
                 }
-                Text("⏎ 만들기 · esc 취소")
+                Text("⏎ 만들기 · ⌘S 시크릿 토글 · esc 취소")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
