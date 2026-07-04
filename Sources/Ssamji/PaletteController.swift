@@ -89,9 +89,25 @@ final class PaletteController {
 
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             guard let self, self.isVisible else { return event }
+            if event.type == .flagsChanged {
+                self.handleFlags(event)
+                return event
+            }
             return self.handle(event) ? nil : event
+        }
+    }
+
+    /// ⌥ 를 누르고 있는 동안 시크릿 내용 피킹 (떼면 자동으로 다시 가림)
+    private func handleFlags(_ event: NSEvent) {
+        let optionHeld = event.modifierFlags.contains(.option)
+        if optionHeld,
+           let item = viewModel.selectedItem,
+           viewModel.isMasked(item) {
+            viewModel.secretRevealed = true
+        } else if !optionHeld, viewModel.secretRevealed {
+            viewModel.secretRevealed = false
         }
     }
 

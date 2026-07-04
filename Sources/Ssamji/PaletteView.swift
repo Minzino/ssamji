@@ -212,7 +212,7 @@ struct PaletteView: View {
                     .foregroundStyle(.secondary)
                 Text(item.customTitle?.isEmpty == false ? item.customTitle! : "시크릿 항목")
                     .font(.headline)
-                Text("⏎ 로 바로 붙여넣거나, 내용을 확인하려면 아래 버튼을 누르세요.")
+                Text("⏎ 로 바로 붙여넣기 · ⌥ 를 누르고 있는 동안 내용 표시")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
