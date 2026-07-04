@@ -12,14 +12,21 @@ enum CodeHighlighter {
         "nil", "null", "None", "self", "this", "new", "in", "guard", "extension",
     ]
 
-    /// 코드로 보이는가 — 여러 줄 + 코드 기호가 충분히 있을 때만
+    /// 하이라이트 대상 상한 — 이보다 크면 일반 텍스트로 (스크롤 히치 방지)
+    static let maxLength = 20_000
+
+    /// 코드로 보이는가 — 여러 줄 + 코드 기호가 충분히 있고, 크기 상한 이내일 때만
     static func looksLikeCode(_ text: String) -> Bool {
+        guard text.utf16.count <= maxLength else { return false }
         let lines = text.split(separator: "\n")
         guard lines.count >= 2 else { return false }
         let signals = ["{", "}", ";", "=>", "()", "def ", "func ", "import ", "class ", "#!", "://", "&&", "||"]
         let hits = signals.filter { text.contains($0) }.count
         return hits >= 2
     }
+
+    // 키워드는 단일 패스 정규식으로 (키워드별 개별 스캔은 대형 텍스트에서 히치 유발)
+    private static let keywordPattern = "\\b(?:" + keywords.joined(separator: "|") + ")\\b"
 
     static func highlight(_ text: String) -> AttributedString {
         let attributed = NSMutableAttributedString(string: text)
@@ -28,9 +35,7 @@ enum CodeHighlighter {
         attributed.addAttribute(.foregroundColor, value: NSColor.labelColor, range: full)
 
         apply(pattern: "\\b\\d+(\\.\\d+)?\\b", color: .systemPurple, to: attributed)
-        for keyword in keywords {
-            apply(pattern: "\\b\(keyword)\\b", color: .systemPink, to: attributed)
-        }
+        apply(pattern: keywordPattern, color: .systemPink, to: attributed)
         apply(pattern: "\"[^\"\\n]*\"|'[^'\\n]*'", color: .systemOrange, to: attributed)
         // 주석은 마지막 — 주석 안의 토큰 색을 덮어쓴다
         apply(pattern: "//[^\\n]*|#[^\\n]*|/\\*.*?\\*/", color: .systemGreen, to: attributed, options: [.dotMatchesLineSeparators])

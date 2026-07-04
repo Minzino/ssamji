@@ -306,9 +306,17 @@ struct PaletteView: View {
                         .textSelection(.enabled)
                 }
             } else {
-                Text(item.text ?? "")
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
+                let text = item.text ?? ""
+                VStack(alignment: .leading, spacing: 6) {
+                    if text.count > 20_000 {
+                        Text("긴 텍스트 — 앞부분만 표시 (붙여넣기는 전체)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(String(text.prefix(20_000)))
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                }
             }
         case .link:
             // 네트워크 페치 없이 즉시 뜨는 정적 링크 카드 (사내망 링크에서 타임아웃 대기 방지)
@@ -344,11 +352,8 @@ struct PaletteView: View {
                     .font(.title3.monospaced())
             }
         case .image:
-            if let path = item.imagePath, let image = NSImage(contentsOfFile: path) {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            if let path = item.imagePath {
+                AsyncImagePreview(path: path)
             } else {
                 Text("이미지를 불러올 수 없음").foregroundStyle(.secondary)
             }
@@ -518,6 +523,53 @@ private struct ResultRow: View {
         .animation(.easeOut(duration: 0.1), value: selected)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+    }
+}
+
+/// 프리뷰 이미지 비동기 로더 — 백그라운드에서 다운샘플 썸네일 생성 + 캐시 (스크롤 히치 방지)
+private struct AsyncImagePreview: View {
+    let path: String
+    @State private var image: NSImage?
+
+    private static let cache = NSCache<NSString, NSImage>()
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, minHeight: 120)
+            }
+        }
+        .task(id: path) {
+            if let cached = Self.cache.object(forKey: path as NSString) {
+                image = cached
+                return
+            }
+            let targetPath = path
+            let loaded = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+                let url = URL(fileURLWithPath: targetPath)
+                guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+                let options: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 1000,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                ]
+                guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+                    return nil
+                }
+                return NSImage(cgImage: cgImage, size: .zero)
+            }.value
+            if let loaded, targetPath == path {
+                Self.cache.setObject(loaded, forKey: targetPath as NSString)
+                image = loaded
+            }
+        }
     }
 }
 

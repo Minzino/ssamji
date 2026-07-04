@@ -60,6 +60,8 @@ enum PasteTransform: CaseIterable {
     }
 
     static func prettyJSON(_ text: String) -> String? {
+        // 초대형 텍스트는 프리뷰 렌더링 히치를 피하려고 시도하지 않음
+        guard text.utf16.count <= 50_000 else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("{") || trimmed.hasPrefix("[") else { return nil }
         guard let data = trimmed.data(using: .utf8),
