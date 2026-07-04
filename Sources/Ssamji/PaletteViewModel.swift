@@ -38,6 +38,8 @@ final class PaletteViewModel: ObservableObject {
     @Published var selectedBoardID: Int64?
     @Published var secretRevealed = false
     @Published var directPasteEnabled = true
+    /// 수집 제외 앱 목록 (AppState 가 미러링) — 프리뷰 체크박스 표시용
+    @Published var excludedApps: [String] = []
 
     // 보드 픽커 (⌘P)
     @Published var pickerVisible = false
@@ -201,10 +203,20 @@ final class PaletteViewModel: ObservableObject {
         }
     }
 
-    // MARK: - 앱 수집 제외 (⌘E)
+    // MARK: - 앱 수집 제외 (⌘E, 프리뷰 체크박스) — 토글
+
+    func isAppExcluded(_ item: ClipItem) -> Bool {
+        guard let bundleID = item.sourceAppBundleID else { return false }
+        return excludedApps.contains(bundleID)
+    }
 
     func excludeSelectedItemApp() {
         guard let item = selectedItem, item.sourceAppBundleID != nil else { return }
+        onExcludeApp?(item)
+    }
+
+    func toggleExcludeApp(for item: ClipItem) {
+        guard item.sourceAppBundleID != nil else { return }
         onExcludeApp?(item)
     }
 

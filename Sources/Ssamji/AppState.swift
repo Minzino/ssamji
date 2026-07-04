@@ -35,7 +35,19 @@ final class AppState: ObservableObject {
 
     /// 수집 제외 앱 (번들 ID). 이 앱들에서 복사한 내용은 히스토리에 쌓지 않는다.
     @Published var excludedApps: [String] = UserDefaults.standard.stringArray(forKey: "excludedApps") ?? [] {
-        didSet { UserDefaults.standard.set(excludedApps, forKey: "excludedApps") }
+        didSet {
+            UserDefaults.standard.set(excludedApps, forKey: "excludedApps")
+            palette?.viewModel.excludedApps = excludedApps
+        }
+    }
+
+    /// 제외 토글 (팔레트 ⌘E / 프리뷰 체크박스)
+    func toggleExcludedApp(bundleID: String) {
+        if excludedApps.contains(bundleID) {
+            removeExcludedApp(bundleID)
+        } else {
+            excludeApp(bundleID: bundleID)
+        }
     }
 
     func excludeApp(bundleID: String) {
@@ -100,10 +112,11 @@ final class AppState: ObservableObject {
             }
             controller.viewModel.onExcludeApp = { [weak self] item in
                 if let bundleID = item.sourceAppBundleID {
-                    self?.excludeApp(bundleID: bundleID)
+                    self?.toggleExcludedApp(bundleID: bundleID)
                 }
             }
             controller.viewModel.directPasteEnabled = directPasteEnabled
+            controller.viewModel.excludedApps = excludedApps
             palette = controller
         }
 

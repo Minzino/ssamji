@@ -357,6 +357,17 @@ struct PaletteView: View {
             Label(item.createdAt.formatted(date: .abbreviated, time: .shortened), systemImage: "clock")
             Label(byteString(item.byteSize), systemImage: "externaldrive")
             Spacer()
+            if item.sourceAppBundleID != nil {
+                Toggle(isOn: Binding(
+                    get: { vm.isAppExcluded(item) },
+                    set: { _ in vm.toggleExcludeApp(for: item) }
+                )) {
+                    Text("이 앱 수집 제외")
+                }
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .help("이 항목의 출처 앱에서 복사한 내용을 앞으로 수집하지 않습니다 (⌘E)")
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -380,8 +391,11 @@ struct PaletteView: View {
             hint("⌘T", "변환")
             hint("⌘P", "보드")
             hint("⌘R", "라벨")
+            hint("⌘E", "앱 제외")
             hint("⌘⌫", "삭제")
-            hint("⌘⇧⌫", "보드 삭제")
+            if vm.selectedBoard != nil {
+                hint("⌘⇧⌫", "보드 삭제")
+            }
             Spacer()
         }
         .padding(.horizontal, 14)
