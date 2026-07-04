@@ -89,9 +89,25 @@ final class PaletteController {
 
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             guard let self, self.isVisible else { return event }
+            if event.type == .flagsChanged {
+                self.handleFlags(event)
+                return event
+            }
             return self.handle(event) ? nil : event
+        }
+    }
+
+    /// ⌥ 를 누르고 있는 동안 시크릿 내용 피킹 (떼면 자동으로 다시 가림)
+    private func handleFlags(_ event: NSEvent) {
+        let optionHeld = event.modifierFlags.contains(.option)
+        if optionHeld,
+           let item = viewModel.selectedItem,
+           viewModel.isMasked(item) {
+            viewModel.secretRevealed = true
+        } else if !optionHeld, viewModel.secretRevealed {
+            viewModel.secretRevealed = false
         }
     }
 
@@ -103,7 +119,31 @@ final class PaletteController {
     }
 
     /// true 를 반환하면 이벤트를 소비한다.
+    /// 수정자 매칭은 contains 로 느슨하게 — capsLock/한글 입력 등 부가 플래그가 붙어도 동작해야 한다.
     private func handle(_ event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let cmd = mods.contains(.command)
+        let shift = mods.contains(.shift)
+
+        // 라벨 입력 중: esc 만 가로채고 나머지는 TextField 로 (⏎ 은 onSubmit)
+        if viewModel.renameVisible {
+            if event.keyCode == 53 {
+                viewModel.closeRename()
+                return true
+            }
+            return false
+        }
+
+        // 보드 픽커(⌘P)가 열려 있으면 픽커가 키를 독점
+        if viewModel.pickerVisible {
+            // 새 보드 이름 입력 중 ⌘S: 시크릿 토글 (마우스 없이)
+            if viewModel.creatingBoard, cmd, event.keyCode == 1 {
+                viewModel.newBoardSecret.toggle()
+                return true
+            }
+            return handlePicker(event)
+        }
+
         switch event.keyCode {
         case 53: // esc
             hide()
@@ -115,19 +155,57 @@ final class PaletteController {
             viewModel.moveSelection(by: -1)
             return true
         case 36, 76: // return, keypad enter — ⇧⏎ 는 복사만, ⏎ 는 다이렉트 페이스트
-            let action: PaletteViewModel.CommitAction =
-                event.modifierFlags.contains(.shift) ? .copyOnly : .paste
+            let action: PaletteViewModel.CommitAction = shift ? .copyOnly : .paste
             viewModel.commitSelection(action: action)
+            return true
+        case 35 where cmd: // ⌘P: 보드에 넣기
+            viewModel.openPicker()
+            return true
+        case 15 where cmd: // ⌘R: 라벨 지정
+            viewModel.openRename()
+            return true
+        case 33 where cmd: // ⌘[ (⇧ 있어도 됨): 이전 보드
+            viewModel.cycleBoard(by: -1)
+            return true
+        case 30 where cmd: // ⌘] : 다음 보드
+            viewModel.cycleBoard(by: 1)
             return true
         default:
             // ⌘1~9 퀵 선택
-            if event.modifierFlags.contains(.command),
+            if cmd, !shift,
                let chars = event.charactersIgnoringModifiers,
                let digit = Int(chars), (1...9).contains(digit) {
                 viewModel.select(index: digit - 1)
                 return true
             }
             return false
+        }
+    }
+
+    private func handlePicker(_ event: NSEvent) -> Bool {
+        // 새 보드 이름 입력 중에는 esc 만 가로채고 나머지는 TextField 에 넘긴다 (⏎ 은 onSubmit 처리)
+        if viewModel.creatingBoard {
+            if event.keyCode == 53 {
+                viewModel.creatingBoard = false
+                return true
+            }
+            return false
+        }
+        switch event.keyCode {
+        case 53: // esc
+            viewModel.closePicker()
+            return true
+        case 125:
+            viewModel.pickerMove(by: 1)
+            return true
+        case 126:
+            viewModel.pickerMove(by: -1)
+            return true
+        case 36, 76:
+            viewModel.pickerCommit()
+            return true
+        default:
+            return true // 픽커가 열린 동안 검색창 입력 방지
         }
     }
 }

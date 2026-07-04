@@ -36,6 +36,15 @@ struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, MutablePersi
     var sourceAppBundleID: String?
     var sourceAppName: String?
     var byteSize: Int
+    var boardId: Int64?
+    /// 사용자가 붙인 라벨 (시크릿 항목 식별용, 일반 항목도 가능)
+    var customTitle: String?
+
+    /// 표시용 제목: 라벨이 있으면 라벨, 없으면 자동 생성 제목
+    var displayTitle: String {
+        if let customTitle, !customTitle.isEmpty { return customTitle }
+        return title
+    }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID

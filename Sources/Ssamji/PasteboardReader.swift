@@ -26,7 +26,7 @@ enum PasteboardReader {
             text: nil, url: nil, colorHex: nil, imagePath: nil, fileURLs: nil,
             sourceAppBundleID: sourceApp?.bundleIdentifier,
             sourceAppName: sourceApp?.localizedName,
-            byteSize: 0
+            byteSize: 0, boardId: nil, customTitle: nil
         )
 
         // 1) 파일

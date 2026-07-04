@@ -15,6 +15,14 @@ final class AppState: ObservableObject {
     @Published var watcherRunning = false
     @Published var lastError: String?
 
+    /// ⏎ 다이렉트 붙여넣기 온오프 (기본 ON). 꺼져 있으면 ⏎ 도 복사만 한다.
+    @Published var directPasteEnabled: Bool = UserDefaults.standard.object(forKey: "directPasteEnabled") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(directPasteEnabled, forKey: "directPasteEnabled")
+            palette?.viewModel.directPasteEnabled = directPasteEnabled
+        }
+    }
+
     private(set) var store: Store?
     private(set) var palette: PaletteController?
     private let watcher = ClipboardWatcher()
@@ -38,6 +46,7 @@ final class AppState: ObservableObject {
             controller.viewModel.onCommit = { [weak self] item, action in
                 self?.commit(item, action: action)
             }
+            controller.viewModel.directPasteEnabled = directPasteEnabled
             palette = controller
         }
 
@@ -76,7 +85,7 @@ final class AppState: ObservableObject {
     private func commit(_ item: ClipItem, action: PaletteViewModel.CommitAction) {
         palette?.hide()
         writeToPasteboard(item)
-        if action == .paste {
+        if action == .paste && directPasteEnabled {
             // 팔레트가 nonactivating 패널이라 이전 앱이 여전히 활성 상태 — 바로 ⌘V 합성
             PasteEngine.pasteToFrontmostApp()
         }

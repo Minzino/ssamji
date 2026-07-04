@@ -50,6 +50,38 @@ final class Store {
             }
         }
 
+        migrator.registerMigration("v2-boards") { db in
+            try db.create(table: "boards") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("uuid", .text).notNull().unique()
+                t.column("name", .text).notNull()
+                t.column("colorHex", .text).notNull()
+                t.column("isSecret", .boolean).notNull().defaults(to: false)
+                t.column("displayOrder", .integer).notNull().defaults(to: 0)
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.alter(table: "items") { t in
+                t.add(column: "boardId", .integer).references("boards", onDelete: .setNull)
+            }
+            try db.create(index: "idx_items_boardId", on: "items", columns: ["boardId"])
+        }
+
+        migrator.registerMigration("v3-customTitle") { db in
+            try db.alter(table: "items") { t in
+                t.add(column: "customTitle", .text)
+            }
+            // FTS 인덱스에 라벨 포함 (라벨로 검색 가능하게 재생성)
+            // synchronize 가 만든 트리거를 먼저 지워야 재생성 시 이름 충돌이 없다
+            try db.dropFTS5SynchronizationTriggers(forTable: "items_fts")
+            try db.drop(table: "items_fts")
+            try db.create(virtualTable: "items_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "items")
+                t.column("title")
+                t.column("text")
+                t.column("customTitle")
+            }
+        }
+
         try migrator.migrate(dbQueue)
     }
 
@@ -72,13 +104,7 @@ final class Store {
     }
 
     func recent(limit: Int = 20) throws -> [ClipItem] {
-        try dbQueue.read { db in
-            try ClipItem
-                .filter(Column("deletedAt") == nil)
-                .order(Column("updatedAt").desc)
-                .limit(limit)
-                .fetchAll(db)
-        }
+        try items(matching: "", boardID: nil, limit: limit)
     }
 
     func count() throws -> Int {
@@ -87,17 +113,78 @@ final class Store {
         }
     }
 
-    /// FTS5 전문검색 (M2 팔레트에서 사용, M1에서는 검증용)
-    func search(_ query: String, limit: Int = 50) throws -> [ClipItem] {
+    /// 목록 조회: 쿼리가 비면 최근순, 있으면 FTS5 전문검색. boardID 로 핀보드 필터링.
+    func items(matching query: String, boardID: Int64?, limit: Int = 50) throws -> [ClipItem] {
         try dbQueue.read { db in
+            if query.isEmpty {
+                var request = ClipItem
+                    .filter(Column("deletedAt") == nil)
+                    .order(Column("updatedAt").desc)
+                    .limit(limit)
+                if let boardID {
+                    request = request.filter(Column("boardId") == boardID)
+                }
+                return try request.fetchAll(db)
+            }
+
             let pattern = FTS5Pattern(matchingAllPrefixesIn: query)
-            let sql = """
+            var sql = """
                 SELECT items.* FROM items
                 JOIN items_fts ON items_fts.rowid = items.id
                 WHERE items_fts MATCH ? AND items.deletedAt IS NULL
-                ORDER BY items.updatedAt DESC LIMIT ?
                 """
-            return try ClipItem.fetchAll(db, sql: sql, arguments: [pattern, limit])
+            var arguments: [DatabaseValueConvertible?] = [pattern]
+            if let boardID {
+                sql += " AND items.boardId = ?"
+                arguments.append(boardID)
+            }
+            sql += " ORDER BY items.updatedAt DESC LIMIT ?"
+            arguments.append(limit)
+            return try ClipItem.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+        }
+    }
+
+    // MARK: - 핀보드
+
+    func boards() throws -> [Board] {
+        try dbQueue.read { db in
+            try Board.order(Column("displayOrder"), Column("id")).fetchAll(db)
+        }
+    }
+
+    func createBoard(name: String, isSecret: Bool) throws -> Board {
+        try dbQueue.write { db in
+            let count = try Board.fetchCount(db)
+            var board = Board(
+                id: nil, uuid: UUID().uuidString, name: name,
+                colorHex: Board.presetColors[count % Board.presetColors.count],
+                isSecret: isSecret, displayOrder: count, createdAt: Date()
+            )
+            try board.insert(db)
+            return board
+        }
+    }
+
+    /// 보드 삭제 — 소속 항목들은 FK onDelete(.setNull) 로 히스토리에 남는다.
+    func deleteBoard(_ board: Board) throws {
+        _ = try dbQueue.write { db in
+            try board.delete(db)
+        }
+    }
+
+    func setBoard(_ boardID: Int64?, for item: ClipItem) throws {
+        try dbQueue.write { db in
+            var updated = item
+            updated.boardId = boardID
+            try updated.update(db)
+        }
+    }
+
+    func setCustomTitle(_ title: String?, for item: ClipItem) throws {
+        try dbQueue.write { db in
+            var updated = item
+            updated.customTitle = title
+            try updated.update(db)
         }
     }
 }
