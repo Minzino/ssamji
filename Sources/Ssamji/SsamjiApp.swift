@@ -6,9 +6,11 @@ struct SsamjiApp: App {
     @StateObject private var state = AppState()
 
     var body: some Scene {
-        MenuBarExtra("쌈지", systemImage: "doc.on.clipboard") {
+        MenuBarExtra {
             StatusMenuView()
                 .environmentObject(state)
+        } label: {
+            Image(nsImage: MenuBarIcon.image)
         }
         .menuBarExtraStyle(.window)
     }

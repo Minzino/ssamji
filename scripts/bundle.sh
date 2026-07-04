@@ -44,3 +44,7 @@ else
     codesign --force --sign - "$APP"
 fi
 echo "✅ 번들 완료: $APP"
+
+# /Applications 에 정식 설치
+ditto "$APP" "/Applications/쌈지.app"
+echo "✅ 설치 완료: /Applications/쌈지.app"
