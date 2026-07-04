@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -95,6 +96,14 @@ struct StatusMenuView: View {
 
             Divider()
 
+            HStack {
+                Text("팔레트 단축키")
+                    .font(.caption)
+                Spacer()
+                KeyboardShortcuts.Recorder(for: .togglePalette)
+                    .controlSize(.small)
+            }
+
             Toggle(isOn: $state.directPasteEnabled) {
                 Text("⏎ 다이렉트 붙여넣기 (끄면 복사만)")
                     .font(.caption)
@@ -176,7 +185,7 @@ struct StatusMenuView: View {
             Divider()
 
             HStack {
-                Button("팔레트 열기 (⌘⇧V)") { state.togglePalette() }
+                Button("팔레트 열기\(paletteShortcutLabel)") { state.togglePalette() }
                 Button("새로고침") {
                     state.refresh()
                     refreshPermissions()
@@ -227,6 +236,11 @@ struct StatusMenuView: View {
     private func refreshPermissions() {
         pasteboard = Permissions.pasteboardStatus()
         accessibility = Permissions.accessibilityGranted()
+    }
+
+    private var paletteShortcutLabel: String {
+        guard let shortcut = KeyboardShortcuts.getShortcut(for: .togglePalette) else { return "" }
+        return " (\(shortcut))"
     }
 
     /// 실행 중인 일반 앱 목록 (이미 제외된 앱과 쌈지 자신은 빼고)
