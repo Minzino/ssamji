@@ -311,7 +311,29 @@ struct PaletteView: View {
                     .textSelection(.enabled)
             }
         case .link:
-            LinkPreviewView(urlString: item.url ?? item.title)
+            // 네트워크 페치 없이 즉시 뜨는 정적 링크 카드 (사내망 링크에서 타임아웃 대기 방지)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "link.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(URL(string: item.url ?? "")?.host() ?? item.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if let label = item.customTitle, !label.isEmpty {
+                            Text(label)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Divider()
+                Text(item.url ?? item.title)
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+                    .foregroundStyle(.secondary)
+            }
         case .color:
             VStack(alignment: .leading, spacing: 10) {
                 RoundedRectangle(cornerRadius: 10)
