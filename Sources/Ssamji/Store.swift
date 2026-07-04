@@ -180,6 +180,38 @@ final class Store {
         }
     }
 
+    /// 보관 기간이 지난 히스토리 항목 정리. 보드에 넣어둔 항목(boardId != nil)은 영구 보존.
+    /// checksum 이 UNIQUE 라 이미지 블롭 파일은 항목과 1:1 — 항목 삭제 시 파일도 지운다.
+    @discardableResult
+    func cleanup(olderThanDays days: Int) throws -> Int {
+        guard days > 0 else { return 0 }
+        let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
+        return try dbQueue.write { db in
+            let doomed = try ClipItem
+                .filter(Column("boardId") == nil)
+                .filter(Column("updatedAt") < cutoff)
+                .fetchAll(db)
+            for item in doomed {
+                if let path = item.imagePath {
+                    try? FileManager.default.removeItem(atPath: path)
+                }
+            }
+            try ClipItem
+                .filter(Column("boardId") == nil)
+                .filter(Column("updatedAt") < cutoff)
+                .deleteAll(db)
+            return doomed.count
+        }
+    }
+
+    func setBoardSecret(_ board: Board, isSecret: Bool) throws {
+        try dbQueue.write { db in
+            var updated = board
+            updated.isSecret = isSecret
+            try updated.update(db)
+        }
+    }
+
     func setCustomTitle(_ title: String?, for item: ClipItem) throws {
         try dbQueue.write { db in
             var updated = item

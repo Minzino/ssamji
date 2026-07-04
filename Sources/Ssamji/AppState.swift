@@ -1,5 +1,6 @@
 import AppKit
 import KeyboardShortcuts
+import ServiceManagement
 import SwiftUI
 
 extension KeyboardShortcuts.Name {
@@ -20,6 +21,33 @@ final class AppState: ObservableObject {
         didSet {
             UserDefaults.standard.set(directPasteEnabled, forKey: "directPasteEnabled")
             palette?.viewModel.directPasteEnabled = directPasteEnabled
+        }
+    }
+
+    /// 히스토리 보관 기간(일). 0 = 무제한(기본 — 이주 직후 옛 히스토리가 날아가지 않게).
+    /// 보드 항목은 기간과 무관하게 영구 보존.
+    @Published var retentionDays: Int = UserDefaults.standard.object(forKey: "retentionDays") as? Int ?? 0 {
+        didSet {
+            UserDefaults.standard.set(retentionDays, forKey: "retentionDays")
+            runCleanup()
+        }
+    }
+
+    private var lastCleanupAt = Date.distantPast
+
+    private func runCleanup() {
+        guard let store, retentionDays > 0 else { return }
+        lastCleanupAt = Date()
+        if let deleted = try? store.cleanup(olderThanDays: retentionDays), deleted > 0 {
+            refresh()
+            palette?.viewModel.search()
+        }
+    }
+
+    /// 캡처 경로에서 하루 한 번 정리 (앱이 오래 떠 있어도 주기 정리 보장)
+    private func cleanupIfDue() {
+        if Date().timeIntervalSince(lastCleanupAt) > 86_400 {
+            runCleanup()
         }
     }
 
@@ -55,6 +83,62 @@ final class AppState: ObservableObject {
         }
 
         refresh()
+        runCleanup()
+
+        // 검증용 CLI 플래그: 실행 파일을 직접 돌릴 때 임포트를 트리거
+        if CommandLine.arguments.contains("--import-paste") {
+            runPasteImport()
+        }
+    }
+
+    // MARK: - Paste 2 이주
+
+    @Published var importStatus: String?
+
+    var pasteImportAvailable: Bool { PasteImporter.isAvailable }
+
+    func runPasteImport() {
+        guard let store, importStatus != "가져오는 중…" else { return }
+        importStatus = "가져오는 중…"
+        Task.detached { [weak self] in
+            let outcome: String
+            do {
+                let result = try PasteImporter.run(into: store)
+                outcome = result.summary
+            } catch {
+                outcome = "실패: \(error.localizedDescription)"
+            }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.importStatus = outcome
+                self.finishImport()
+                print("[PasteImporter] \(outcome)")
+            }
+        }
+    }
+
+    private func finishImport() {
+        refresh()
+        palette?.viewModel.reloadBoards()
+        palette?.viewModel.search()
+    }
+
+    // MARK: - 로그인 시 시작
+
+    var launchAtLogin: Bool {
+        get { SMAppService.mainApp.status == .enabled }
+        set {
+            do {
+                if newValue {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                lastError = "로그인 시작 설정 실패: \(error.localizedDescription)"
+            }
+            objectWillChange.send()
+        }
     }
 
     func togglePalette() {
@@ -69,6 +153,7 @@ final class AppState: ObservableObject {
         do {
             try store.save(item)
             refresh()
+            cleanupIfDue()
         } catch {
             lastError = "저장 실패: \(error.localizedDescription)"
         }

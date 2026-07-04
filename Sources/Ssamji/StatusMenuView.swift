@@ -6,6 +6,13 @@ struct StatusMenuView: View {
     @EnvironmentObject private var state: AppState
     @State private var pasteboard: Permissions.Status = .systemDefault
     @State private var accessibility = false
+    @State private var draftRetention: Double = 91
+
+    /// 드래그 중엔 드래프트 값, 평소엔 확정 값 표시
+    private var retentionLabel: String {
+        let days = Int(draftRetention)
+        return days > 90 ? "무제한" : "\(days)일"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -13,7 +20,7 @@ struct StatusMenuView: View {
                 Image(systemName: "doc.on.clipboard.fill")
                 Text("쌈지").font(.headline)
                 Spacer()
-                Text("v0.4.0 · M4").font(.caption).foregroundStyle(.secondary)
+                Text("v0.6.0 · M6").font(.caption).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {
@@ -92,6 +99,37 @@ struct StatusMenuView: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
 
+            Toggle(isOn: Binding(
+                get: { state.launchAtLogin },
+                set: { state.launchAtLogin = $0 }
+            )) {
+                Text("로그인 시 자동 시작")
+                    .font(.caption)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("히스토리 보관")
+                        .font(.caption)
+                    Spacer()
+                    Text(retentionLabel)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                // 드래그 중에는 적용하지 않고, 놓는 순간에만 반영 (스쳐 지나간 값으로 삭제되는 것 방지)
+                Slider(value: $draftRetention, in: 1...91, step: 1) { editing in
+                    if !editing {
+                        state.retentionDays = draftRetention > 90 ? 0 : Int(draftRetention)
+                    }
+                }
+                .controlSize(.small)
+                Text("보드에 넣은 항목은 기간과 무관하게 보존됩니다.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
             Divider()
 
             HStack {
@@ -111,6 +149,7 @@ struct StatusMenuView: View {
         .onAppear {
             state.refresh()
             refreshPermissions()
+            draftRetention = state.retentionDays == 0 ? 91 : Double(state.retentionDays)
         }
     }
 
