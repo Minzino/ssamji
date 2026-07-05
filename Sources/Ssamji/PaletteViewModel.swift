@@ -41,8 +41,8 @@ final class PaletteViewModel: ObservableObject {
     /// 텍스트 프리뷰의 사전 계산 결과 — body 에서 매번 하이라이트/JSON 정리를 다시 돌리면
     /// 키 입력마다 CoreText 전체 재조판이 일어난다 (프로파일로 확인된 최대 병목)
     enum TextPreviewContent {
-        case json(String)
-        case code(AttributedString)
+        case json(String, truncated: Bool)
+        case code(AttributedString, truncated: Bool)
         case plain(String, truncated: Bool)
         case none
     }
@@ -60,13 +60,16 @@ final class PaletteViewModel: ObservableObject {
             previewContent = .none
             return
         }
+        // 표시 상한 5천 자 — 바닥/정지 시 프리뷰 조판이 입력을 막는 히컵 방지 (붙여넣기는 전체)
+        let cap = 5_000
         let text = item.text ?? ""
         if let pretty = PasteTransform.prettyJSON(text) {
-            previewContent = .json(String(pretty.prefix(20_000)))
+            previewContent = .json(String(pretty.prefix(cap)), truncated: pretty.count > cap)
         } else if CodeHighlighter.looksLikeCode(text) {
-            previewContent = .code(CodeHighlighter.highlight(text))
+            let capped = String(text.prefix(cap))
+            previewContent = .code(CodeHighlighter.highlight(capped), truncated: text.count > cap)
         } else {
-            previewContent = .plain(String(text.prefix(5_000)), truncated: text.count > 5_000)
+            previewContent = .plain(String(text.prefix(cap)), truncated: text.count > cap)
         }
     }
 

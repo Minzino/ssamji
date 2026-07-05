@@ -29,34 +29,7 @@ struct PaletteView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(.separator, lineWidth: 1)
         )
-        .overlay {
-            if vm.pickerVisible {
-                boardPickerOverlay
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-            }
-        }
-        .overlay {
-            if vm.renameVisible {
-                renameOverlay
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-            }
-        }
-        .overlay {
-            if vm.transformVisible {
-                transformOverlay
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-            }
-        }
-        .overlay {
-            if vm.confirmingBoardDelete {
-                boardDeleteOverlay
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-            }
-        }
-        .animation(.easeOut(duration: 0.14), value: vm.pickerVisible)
-        .animation(.easeOut(duration: 0.14), value: vm.renameVisible)
-        .animation(.easeOut(duration: 0.14), value: vm.transformVisible)
-        .animation(.easeOut(duration: 0.14), value: vm.confirmingBoardDelete)
+        .overlay { overlayLayer }
         .onAppear { searchFocused = true }
         // 오버레이가 열릴 때 검색창 포커스를 명시적으로 해제해야 타이핑이 검색창으로 새지 않는다
         .onChange(of: vm.renameVisible) { _, visible in
@@ -73,6 +46,34 @@ struct PaletteView: View {
                 searchFocused = true
             }
         }
+    }
+
+    // MARK: - 오버레이 레이어
+    // 애니메이션은 이 서브트리에만 국한 — 루트에 걸면 키 입력마다 전체 트리가 트랜잭션 검사를 받는다
+
+    private var overlayLayer: some View {
+        ZStack {
+            if vm.pickerVisible {
+                boardPickerOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+            if vm.renameVisible {
+                renameOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+            if vm.transformVisible {
+                transformOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+            if vm.confirmingBoardDelete {
+                boardDeleteOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+        }
+        .animation(.easeOut(duration: 0.14), value: vm.pickerVisible)
+        .animation(.easeOut(duration: 0.14), value: vm.renameVisible)
+        .animation(.easeOut(duration: 0.14), value: vm.transformVisible)
+        .animation(.easeOut(duration: 0.14), value: vm.confirmingBoardDelete)
     }
 
     // MARK: - 변환 붙여넣기 (⌘T)
@@ -538,18 +539,18 @@ private struct TextPreviewBody: View, Equatable {
 
     var body: some View {
         switch content {
-        case .json(let pretty):
+        case .json(let pretty, let truncated):
             VStack(alignment: .leading, spacing: 6) {
-                Label("JSON", systemImage: "curlybraces")
+                Label(truncated ? "JSON — 앞부분만 표시" : "JSON", systemImage: "curlybraces")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Text(pretty)
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
             }
-        case .code(let highlighted):
+        case .code(let highlighted, let truncated):
             VStack(alignment: .leading, spacing: 6) {
-                Label("코드", systemImage: "chevron.left.forwardslash.chevron.right")
+                Label(truncated ? "코드 — 앞부분만 표시" : "코드", systemImage: "chevron.left.forwardslash.chevron.right")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Text(highlighted)
