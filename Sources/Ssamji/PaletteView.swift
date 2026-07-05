@@ -1,5 +1,23 @@
 import SwiftUI
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 모션 금지 목록 — 성능 헌법 계약서 (위반 = 리젝, 과거 3초 프리징 회귀의 원인들)
+//
+//  1. 루트 뷰 .animation(value:) 금지 — 키 입력마다 전체 트리가 트랜잭션 검사를 받는다.
+//     애니메이션은 리프/서브트리에만: overlayLayer, StackBadge, TabPulse, 힌트 숫자 Text.
+//  2. 결과 리스트 삽입/삭제 트랜지션 금지 — 검색 타이핑 핫패스.
+//     리스트 갱신은 무애니메이션 즉시 교체 고정.
+//  3. 프리뷰 크로스페이드 금지 — 대형 조판과 겹치면 히치. 프리뷰 교체는 즉시.
+//  4. scrollTo 애니메이션 금지 — 호출 자체가 전체 측정을 유발하므로
+//     항상 트랜잭션 비활성(disablesAnimations)으로 호출한다.
+//  5. matchedGeometryEffect 전면 금지 — 지오메트리 질의가 레이아웃 재귀를 유발한다.
+//  6. 키 자동반복 중 트랜잭션 생성 금지 — 단발 선택 이동만 90ms easeOut
+//     (PaletteViewModel.moveSelection 의 keyRepeatActive 분기 참조).
+//
+// 팔레트 show/hide 모션은 AppKit 레이어(CABasicAnimation, PaletteController) 전용 —
+// SwiftUI 트랜지션으로 옮기지 말 것. 미래의 깔롱 욕심으로부터 핫패스를 지키는 계약이다.
+// ═════════════════════════════════════════════════════════════════════════════
+
 /// 중앙 팔레트: 상단 검색창 + 좌측 결과 리스트 + 우측 프리뷰 페인.
 struct PaletteView: View {
     @EnvironmentObject private var vm: PaletteViewModel
@@ -18,6 +36,11 @@ struct PaletteView: View {
                 .strokeBorder(.separator, lineWidth: 1)
             VStack(spacing: 0) {
                 searchBar
+                // '유약이 흘러내린' 그라디언트 헤어라인 — 정적 리프, 재평가 비용 없음
+                SsamjiColor.glazeHairline
+                    .frame(height: 1)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
                 boardTabs
                 Divider()
                 // HSplitView(NSSplitView 브리지)는 레이아웃 재귀를 유발해 제거 — 고정 폭 HStack
@@ -34,6 +57,8 @@ struct PaletteView: View {
             overlayLayer
         }
         .frame(width: 720, height: 440)
+        // 컨트롤(버튼·체크박스) 일괄 청자화 — 환경값 주입이라 지오메트리/재평가 비용 없음
+        .tint(SsamjiColor.accent)
         .onAppear { searchFocused = true }
         // 오버레이가 열릴 때 검색창 포커스를 명시적으로 해제해야 타이핑이 검색창으로 새지 않는다
         .onChange(of: vm.renameVisible) { _, visible in
@@ -73,11 +98,28 @@ struct PaletteView: View {
                 boardDeleteOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
+            if vm.stackPickerVisible {
+                stackPickerOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
         }
         .animation(.easeOut(duration: 0.14), value: vm.pickerVisible)
         .animation(.easeOut(duration: 0.14), value: vm.renameVisible)
         .animation(.easeOut(duration: 0.14), value: vm.transformVisible)
         .animation(.easeOut(duration: 0.14), value: vm.confirmingBoardDelete)
+        .animation(.easeOut(duration: 0.14), value: vm.stackPickerVisible)
+    }
+
+    // MARK: - 스택 커밋 픽커 (⌘⏎)
+
+    private var stackPickerOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .onTapGesture { vm.closeStackPicker() }
+            StackPickerCard()
+                .environmentObject(vm)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - 변환 붙여넣기 (⌘T)
@@ -99,9 +141,9 @@ struct PaletteView: View {
             Color.black.opacity(0.25)
                 .onTapGesture { vm.confirmingBoardDelete = false }
             VStack(alignment: .leading, spacing: 10) {
-                Label("보드 삭제", systemImage: "trash")
-                    .font(.headline)
-                    .foregroundStyle(.red)
+                // 파괴 액션 카드 — 세로 캡슐·테두리를 danger(단청 주홍)로
+                SsamjiCardTitle(text: "보드 삭제", tint: SsamjiColor.danger)
+                    .foregroundStyle(SsamjiColor.danger)
                 Text("'\(vm.selectedBoard?.name ?? "")' 보드를 삭제할까요?\n항목들은 삭제되지 않고 히스토리에 남습니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -109,10 +151,7 @@ struct PaletteView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
-            .padding(16)
-            .frame(width: 300)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+            .ssamjiCard(width: 300, tint: SsamjiColor.danger)
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -170,9 +209,11 @@ struct PaletteView: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 3)
             .background(
-                selected ? AnyShapeStyle(Color.accentColor.opacity(0.25)) : AnyShapeStyle(.quaternary.opacity(0.5)),
+                selected ? AnyShapeStyle(SsamjiColor.accent.opacity(0.25)) : AnyShapeStyle(.quaternary.opacity(0.5)),
                 in: Capsule()
             )
+            // ⌘P 배정 성공 펄스 — 대상 탭 캡슐 리프에만 (평소엔 opacity 0 의 정적 오버레이)
+            .overlay(TabPulse(active: id != nil && vm.pulsingBoardID == id))
         }
         .buttonStyle(.plain)
     }
@@ -194,10 +235,10 @@ struct PaletteView: View {
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(vm.query.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.accentColor))
+                .foregroundStyle(vm.query.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(SsamjiColor.accent))
             TextField("쌈지 검색…", text: $vm.query)
                 .textFieldStyle(.plain)
-                .font(.title3)
+                .font(SsamjiFont.searchField)
                 .focused($searchFocused)
             if !vm.results.isEmpty {
                 Text("\(vm.results.count)개")
@@ -225,7 +266,8 @@ struct PaletteView: View {
                             masked: vm.isMasked(item),
                             boardColor: vm.board(for: item).flatMap { Color(hex: $0.colorHex) },
                             stackNumber: vm.stackIndex(of: item).map { $0 + 1 },
-                            onTap: { vm.select(index: index) }
+                            onTap: { vm.selectOnly(index: index) },
+                            onDoubleTap: { vm.select(index: index) }
                         )
                         .equatable()
                         .id(index)
@@ -235,14 +277,18 @@ struct PaletteView: View {
             }
             .onChange(of: vm.selectedIndex) { _, newIndex in
                 // scrollTo 는 호출 자체가 LazyVStack 전체 측정을 유발 (프로파일: 키당 ~14ms)
-                // → 선택이 보이는 창(약 9행)을 벗어날 때만 호출
+                // → 선택이 보이는 창(약 9행)을 벗어날 때만 호출.
+                // 단발 이동의 90ms 트랜잭션(moveSelection)이 스크롤로 새지 않도록
+                // 항상 트랜잭션 비활성으로 호출한다 (모션 금지 목록 4항).
                 let window = 8
+                var still = Transaction()
+                still.disablesAnimations = true
                 if newIndex < scrollWindowTop {
                     scrollWindowTop = newIndex
-                    proxy.scrollTo(newIndex)
+                    withTransaction(still) { proxy.scrollTo(newIndex) }
                 } else if newIndex > scrollWindowTop + window {
                     scrollWindowTop = newIndex - window
-                    proxy.scrollTo(newIndex)
+                    withTransaction(still) { proxy.scrollTo(newIndex) }
                 }
             }
             .onChange(of: vm.results.count) { _, _ in
@@ -250,10 +296,15 @@ struct PaletteView: View {
             }
             .overlay {
                 if vm.results.isEmpty {
-                    ContentUnavailableView(
-                        vm.query.isEmpty ? "아직 수집된 항목이 없어요" : "검색 결과 없음",
-                        systemImage: vm.query.isEmpty ? "tray" : "magnifyingglass"
-                    )
+                    // 빈 복주머니 — SF Symbol 조합 + 청자 틴트 (커스텀 라인 일러스트는 후속)
+                    VStack(spacing: 10) {
+                        Image(systemName: vm.query.isEmpty ? "bag" : "bag.badge.questionmark")
+                            .font(.system(size: 34, weight: .light))
+                            .foregroundStyle(SsamjiColor.accent.opacity(0.45))
+                        Text(vm.query.isEmpty ? "아직 쌈지가 비어 있어요" : "그물에 걸린 게 없어요")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -290,9 +341,10 @@ struct PaletteView: View {
     private func preview(for item: ClipItem) -> some View {
         if vm.isMasked(item) && !vm.secretRevealed {
             VStack(spacing: 10) {
+                // 금사(金絲) 잠금 글리프 — 56pt 골드 그라디언트 (커스텀 글리프는 후속 릴리스)
                 Image(systemName: "lock.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 56, weight: .regular))
+                    .foregroundStyle(SsamjiColor.goldGlaze)
                 Text(item.customTitle?.isEmpty == false ? item.customTitle! : "시크릿 항목")
                     .font(.headline)
                 Text("⏎ 로 바로 붙여넣기 · ⌥ 를 누르고 있는 동안 내용 표시")
@@ -322,7 +374,7 @@ struct PaletteView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "link.circle.fill")
                         .font(.system(size: 32))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SsamjiColor.kindLink)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(URL(string: item.url ?? "")?.host() ?? item.title)
                             .font(.headline)
@@ -411,7 +463,23 @@ struct PaletteView: View {
             hint("⏎", vm.directPasteEnabled ? "붙여넣기" : "복사")
             hint("⌘K", "스택")
             if !vm.stack.isEmpty {
-                hint("⌘⏎", "스택 \(vm.stack.count)개 붙여넣기")
+                // 숫자 카운터는 이 Text 하나에만 numericText 트랜지션 (리프 한정 — 헌법 2조)
+                HStack(spacing: 4) {
+                    Text("⌘⏎")
+                        .font(.caption2.monospaced())
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                    Text("스택 \(vm.stack.count)개 붙여넣기")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
+                        .animation(.easeOut(duration: 0.18), value: vm.stack.count)
+                }
+                // 명시적 비우기 — 키보드(⌘⇧K)와 마우스(힌트 클릭) 동일 동작
+                hint("⌘⇧K", "비우기")
+                    .contentShape(Rectangle())
+                    .onTapGesture { vm.clearStack() }
             }
             hint("⌘T", "변환")
             hint("⌘P", "보드")
@@ -451,7 +519,10 @@ private struct ResultRow: View, Equatable {
     let masked: Bool
     let boardColor: Color?
     let stackNumber: Int?
+    /// 단일 클릭 — 선택만 (프리뷰 확인). 이전 앱으로 붙여넣기가 발사되던 오발 제거.
     let onTap: () -> Void
+    /// 더블 클릭 — 붙여넣기 커밋
+    let onDoubleTap: () -> Void
 
     static func == (lhs: ResultRow, rhs: ResultRow) -> Bool {
         lhs.item.uuid == rhs.item.uuid &&
@@ -465,20 +536,32 @@ private struct ResultRow: View, Equatable {
         lhs.stackNumber == rhs.stackNumber
     }
 
-    /// 타입별 색 — 컬러 항목은 실제 색, 나머지는 종류별 틴트
+    /// 타입별 색 — 컬러 항목은 실제 색, 나머지는 종류별 틴트 (Catppuccin 정렬), 시크릿은 금사
     private var kindTint: Color {
-        if masked { return .secondary }
+        if masked { return SsamjiColor.gold }
         switch item.kind {
         case .text: return .secondary
-        case .link: return .blue
-        case .image: return .purple
-        case .file: return .orange
+        case .link: return SsamjiColor.kindLink
+        case .image: return SsamjiColor.kindImage
+        case .file: return SsamjiColor.kindFile
         case .color: return Color(hex: item.colorHex ?? "") ?? .gray
         }
     }
 
+    /// 행 배경 — 시크릿은 gold 워시(6%/선택 14%), 일반은 선택 시 청자 22%
+    private var rowFill: Color {
+        if masked {
+            return SsamjiColor.gold.opacity(selected ? 0.14 : 0.06)
+        }
+        return selected ? SsamjiColor.accent.opacity(0.22) : .clear
+    }
+
     var body: some View {
         HStack(spacing: 8) {
+            // 선택 인디케이터 — 3×18pt 청자 캡슐 (시크릿 행은 골드), 자리는 항상 예약해 레이아웃 고정
+            Capsule()
+                .fill(selected ? (masked ? SsamjiColor.gold : SsamjiColor.accent) : Color.clear)
+                .frame(width: 3, height: 18)
             if !masked, item.kind == .color, let swatch = Color(hex: item.colorHex ?? "") {
                 Circle()
                     .fill(swatch)
@@ -491,10 +574,17 @@ private struct ResultRow: View, Equatable {
                     .foregroundStyle(kindTint)
             }
             VStack(alignment: .leading, spacing: 1) {
-                // 마스킹돼도 라벨은 보여준다 — 라벨이 없을 때만 점 처리
-                Text(masked ? (item.customTitle?.isEmpty == false ? item.customTitle! : "••••••••") : item.displayTitle)
-                    .lineLimit(1)
-                    .font(.callout)
+                // 마스킹돼도 라벨은 보여준다 — 라벨이 없을 때만 점 처리 (점은 gold@60% 모노)
+                if masked, !(item.customTitle?.isEmpty == false) {
+                    Text("••••••••")
+                        .lineLimit(1)
+                        .font(SsamjiFont.rowTitle.monospaced())
+                        .foregroundStyle(SsamjiColor.gold.opacity(0.6))
+                } else {
+                    Text(masked ? item.customTitle! : item.displayTitle)
+                        .lineLimit(1)
+                        .font(SsamjiFont.rowTitle)
+                }
                 HStack(spacing: 4) {
                     if let icon = AppIcons.icon(for: item.sourceAppBundleID) {
                         Image(nsImage: icon)
@@ -511,11 +601,7 @@ private struct ResultRow: View, Equatable {
             }
             Spacer(minLength: 0)
             if let stackNumber {
-                Text("\(stackNumber)")
-                    .font(.caption2.bold().monospacedDigit())
-                    .frame(width: 15, height: 15)
-                    .background(Color.accentColor.opacity(0.8), in: Circle())
-                    .foregroundStyle(.white)
+                StackBadge(number: stackNumber)
             }
             if let boardColor {
                 Circle().fill(boardColor).frame(width: 6, height: 6)
@@ -523,19 +609,73 @@ private struct ResultRow: View, Equatable {
             if index < 9 {
                 Text("⌘\(index + 1)")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(selected ? AnyShapeStyle(SsamjiColor.accent) : AnyShapeStyle(.quaternary))
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(
-            selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
-            in: RoundedRectangle(cornerRadius: 7)
-        )
-        // 선택 하이라이트는 즉시 반영 — 키 반복(30ms) 중 100ms 애니메이션 트랜잭션이
-        // 계속 중첩돼 CA 커밋/AttributeGraph 갱신 비용을 만들던 것 제거
+        .background(rowFill, in: RoundedRectangle(cornerRadius: 7))
+        // 선택 하이라이트 모션은 이 행에 .animation 을 붙이지 않는다 — 키 반복(30ms) 중
+        // 애니메이션 트랜잭션이 중첩돼 CA 커밋/AttributeGraph 비용을 만들던 회귀 방지.
+        // 단발 이동의 90ms easeOut 은 mutation 지점(moveSelection)의 withAnimation 이 담당:
+        // 반복 중엔 트랜잭션이 아예 생성되지 않고, 단발엔 바뀐 두 행만 램프된다.
         .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        // 더블탭은 .gesture, 단일탭은 .simultaneousGesture — 단일탭이 더블탭 판정을 기다리지 않고
+        // 첫 클릭에 즉시 발화한다 (선택 지연 없음). 더블클릭 시엔 선택 2회(동일 인덱스 가드) 후 커밋.
+        .gesture(TapGesture(count: 2).onEnded(onDoubleTap))
+        .simultaneousGesture(TapGesture().onEnded(onTap))
+    }
+}
+
+/// ⌘K 담기 확인 모션 — 배지 리프에만 스프링 등장 (scale 0.5→1 + 페이드, 1회 미세 오버슈트).
+/// withAnimation 은 배지가 새로 나타나는 순간(⌘K)에만 발생 — 키 반복·리스트 갱신 핫패스 무접촉,
+/// 행 레이아웃은 배지 부재 시 기존과 동일 (빈 슬롯 예약 없음). 제거는 즉시 (리스트 트랜지션 금지 준수).
+private struct StackBadge: View {
+    let number: Int
+    @State private var appeared = false
+
+    var body: some View {
+        Text("\(number)")
+            .font(.caption2.bold().monospacedDigit())
+            .frame(width: 15, height: 15)
+            .background(SsamjiColor.stackBadge, in: Circle())
+            .foregroundStyle(.white)
+            .scaleEffect(appeared ? 1 : 0.5)
+            .opacity(appeared ? 1 : 0)
+            .onAppear {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.70)) {
+                    appeared = true
+                }
+            }
+    }
+}
+
+/// ⌘P 보드 배정 성공 펄스 — 대상 보드 탭 캡슐 리프에만 스코핑 (450ms easeOut).
+/// withAnimation 은 배정 성공 순간 이 리프의 @State 에만 1회 발생 —
+/// 루트/리스트/키 반복 핫패스 무접촉. active=false 복귀(펄스 해제 신호)는
+/// intensity 가 이미 0 이라 시각 변화·트랜잭션 없이 지나간다.
+private struct TabPulse: View {
+    let active: Bool
+    @State private var intensity: Double = 0
+
+    var body: some View {
+        ZStack {
+            Capsule()
+                .fill(SsamjiColor.accent.opacity(0.28 * intensity))
+            Capsule()
+                .strokeBorder(SsamjiColor.accent.opacity(0.9 * intensity), lineWidth: 1.5)
+        }
+        .allowsHitTesting(false)
+        .onChange(of: active) { _, nowActive in
+            guard nowActive else { return }
+            // 최대 밝기로 즉시 점등(무트랜잭션) 후 다음 틱에 450ms easeOut 감쇠 — 펄스 1회
+            var snap = Transaction()
+            snap.disablesAnimations = true
+            withTransaction(snap) { intensity = 1 }
+            Task { @MainActor in
+                withAnimation(.easeOut(duration: 0.45)) { intensity = 0 }
+            }
+        }
     }
 }
 
@@ -639,8 +779,7 @@ private struct TransformPickerCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("변환해서 붙여넣기")
-                .font(.headline)
+            SsamjiCardTitle(text: "변환해서 붙여넣기")
             VStack(spacing: 2) {
                 ForEach(Array(vm.transformOptions.enumerated()), id: \.offset) { index, transform in
                     let selected = index == vm.transformIndex
@@ -655,7 +794,7 @@ private struct TransformPickerCard: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .background(
-                        selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
+                        selected ? AnyShapeStyle(SsamjiColor.accent.opacity(0.22)) : AnyShapeStyle(.clear),
                         in: RoundedRectangle(cornerRadius: 6)
                     )
                     .contentShape(Rectangle())
@@ -665,14 +804,60 @@ private struct TransformPickerCard: View {
                     }
                 }
             }
+            if let preview = vm.transformPreview {
+                Divider()
+                Text(preview)
+                    .font(SsamjiFont.previewMono)
+                    .lineSpacing(2)
+                    .lineLimit(4)
+                    .truncationMode(.tail)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Text("⏎ 붙여넣기 · ⇧⏎ 복사만 · esc 취소 (원본은 그대로 보존)")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .padding(16)
-        .frame(width: 320)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        .ssamjiCard(width: 320)
+    }
+}
+
+/// ⌘⏎ 스택 커밋 픽커 카드 — 구분자 4종 + 순차 모드
+private struct StackPickerCard: View {
+    @EnvironmentObject private var vm: PaletteViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SsamjiCardTitle(text: "스택 \(vm.stack.count)개 붙여넣기")
+            VStack(spacing: 2) {
+                ForEach(Array(PaletteViewModel.stackCommitOptions.enumerated()), id: \.offset) { index, option in
+                    let selected = index == vm.stackPickerIndex
+                    HStack(spacing: 8) {
+                        Image(systemName: option.symbolName)
+                            .frame(width: 16)
+                            .foregroundStyle(.secondary)
+                        Text(option.label)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.callout)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        selected ? AnyShapeStyle(SsamjiColor.accent.opacity(0.22)) : AnyShapeStyle(.clear),
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        vm.stackPickerIndex = index
+                        vm.stackPickerCommit()
+                    }
+                }
+            }
+            Text("⏎ 붙여넣기 · ⇧⏎ 복사만 · esc 취소 · ⌘⇧K 스택 비우기")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .ssamjiCard(width: 320)
     }
 }
 
@@ -683,8 +868,7 @@ private struct BoardPickerCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("보드에 넣기")
-                .font(.headline)
+            SsamjiCardTitle(text: "보드에 넣기")
 
             VStack(spacing: 2) {
                 ForEach(Array(vm.pickerOptions.enumerated()), id: \.offset) { index, option in
@@ -708,10 +892,7 @@ private struct BoardPickerCard: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(16)
-        .frame(width: 300)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        .ssamjiCard(width: 300)
         .onChange(of: vm.creatingBoard) { _, creating in
             if creating {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { nameFocused = true }
@@ -732,7 +913,7 @@ private struct BoardPickerCard: View {
                 }
                 Text(board.name)
             case .removeFromBoard:
-                Image(systemName: "minus.circle").foregroundStyle(.red)
+                Image(systemName: "minus.circle").foregroundStyle(SsamjiColor.danger)
                 Text(option.label)
             case .createNew:
                 Image(systemName: "plus.circle")
@@ -744,7 +925,7 @@ private struct BoardPickerCard: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
-            selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
+            selected ? AnyShapeStyle(SsamjiColor.accent.opacity(0.22)) : AnyShapeStyle(.clear),
             in: RoundedRectangle(cornerRadius: 6)
         )
         .contentShape(Rectangle())
@@ -762,8 +943,7 @@ private struct RenameCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("라벨 지정")
-                .font(.headline)
+            SsamjiCardTitle(text: "라벨 지정")
             Text("마스킹돼도 라벨은 목록에 표시됩니다.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -775,10 +955,7 @@ private struct RenameCard: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .padding(16)
-        .frame(width: 300)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        .ssamjiCard(width: 300)
         .onAppear {
             // 검색창이 first responder 를 내려놓은 다음에 포커스를 잡아야 확실하다
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { focused = true }

@@ -33,23 +33,66 @@ final class PaletteController {
         center(panel)
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        applyShowMotion(to: panel)
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.13
+            context.duration = 0.14
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
         }
         installKeyMonitor()
     }
 
-    func hide() {
+    /// 퇴장은 항상 등장(140ms)보다 빠르다 (매듭 모션 원칙).
+    /// - Parameter animated: false 면 애니메이션 생략, 즉시 orderOut —
+    ///   다이렉트 페이스트 커밋 경로 전용 (합성 ⌘V 전에 패널이 완전히 사라져야 한다).
+    func hide(animated: Bool = true) {
         removeKeyMonitor()
         guard let panel, panel.isVisible else { return }
+        guard animated else {
+            panel.contentView?.layer?.removeAnimation(forKey: Self.showMotionKey)
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            return
+        }
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.1
+            context.duration = 0.09
             panel.animator().alphaValue = 0
         }, completionHandler: {
             panel.orderOut(nil)
             panel.alphaValue = 1
         })
+    }
+
+    // MARK: - 매듭 모션 (등장)
+
+    private static let showMotionKey = "ssamji.show"
+
+    /// 등장 모션: scale 0.98→1.00 + translateY 8→0 — 기존 alpha 페이드 위에 얹는다.
+    /// SwiftUI 트리 무접촉(성능 헌법): CABasicAnimation 은 콘텐츠 뷰의 CALayer
+    /// 프레젠테이션 트리에서만 돌고, 모델 값은 identity 그대로라
+    /// body 재평가·트랜잭션이 일절 발생하지 않는다.
+    private func applyShowMotion(to panel: PalettePanel) {
+        guard let layer = panel.contentView?.layer else { return }
+        let size = layer.bounds.size
+        guard size.width > 0, size.height > 0 else { return }
+        let scale: CGFloat = 0.98
+        // 아래에서 8px 솟아오름 — 레이어 지오메트리 뒤집힘 여부에 따라 부호 결정
+        let dropY: CGFloat = layer.isGeometryFlipped ? 8 : -8
+        // 중심 기준 스케일: 원점 스케일 후 중심이 제자리로 오도록 평행이동으로 보정
+        var from = CATransform3DMakeTranslation(
+            size.width * (1 - scale) / 2,
+            size.height * (1 - scale) / 2 + dropY,
+            0
+        )
+        from = CATransform3DScale(from, scale, scale, 1)
+        let anim = CABasicAnimation(keyPath: "transform")
+        anim.fromValue = NSValue(caTransform3D: from)
+        anim.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        anim.duration = 0.14
+        // easeOutExpo 계열 — 빠르게 도착해 매듭짓는 감각
+        anim.timingFunction = CAMediaTimingFunction(controlPoints: 0.19, 1.0, 0.22, 1.0)
+        layer.removeAnimation(forKey: Self.showMotionKey)
+        layer.add(anim, forKey: Self.showMotionKey)
     }
 
     // MARK: - Panel
@@ -64,6 +107,9 @@ final class PaletteController {
         // 팔레트는 720×440 고정 — SwiftUI 내용물 크기로 제약을 재계산하지 않는다.
         // (기본값이면 키 입력마다 전체 뷰 그래프 sizeThatFits 가 돌아 레이아웃 히치 발생)
         hosting.sizingOptions = []
+        // 등장 모션(CABasicAnimation)을 걸 레이어 확보 — NSHostingView 가 이미 레이어 backing
+        // 이지만 명시해 둔다 (레이어가 없으면 모션만 조용히 생략되고 페이드는 유지)
+        hosting.wantsLayer = true
         let p = PalettePanel(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 440),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -181,6 +227,30 @@ final class PaletteController {
             }
         }
 
+        // 스택 커밋 픽커(⌘⏎) — 구분자/순차 선택
+        if viewModel.stackPickerVisible {
+            switch event.keyCode {
+            case 53:
+                viewModel.closeStackPicker()
+                return true
+            case 125:
+                viewModel.stackPickerMove(by: 1)
+                return true
+            case 126:
+                viewModel.stackPickerMove(by: -1)
+                return true
+            case 36, 76:
+                viewModel.stackPickerCommit(action: shift ? .copyOnly : .paste)
+                return true
+            case 40 where cmd && shift: // 픽커 안에서도 ⌘⇧K 비우기 허용
+                viewModel.clearStack()
+                viewModel.closeStackPicker()
+                return true
+            default:
+                return true
+            }
+        }
+
         // 변환 픽커(⌘T)
         if viewModel.transformVisible {
             switch event.keyCode {
@@ -213,8 +283,8 @@ final class PaletteController {
             viewModel.keyRepeatActive = event.isARepeat
             viewModel.moveSelection(by: event.keyCode == 125 ? 1 : -1)
             return true
-        case 36 where cmd, 76 where cmd: // ⌘⏎: 페이스트 스택 순서대로 붙여넣기
-            viewModel.commitStack(action: shift ? .copyOnly : .paste)
+        case 36 where cmd, 76 where cmd: // ⌘⏎: 스택 커밋 픽커 (구분자/순차 선택 후 ⏎)
+            viewModel.openStackPicker()
             return true
         case 36, 76: // return, keypad enter — ⇧⏎ 는 복사만, ⏎ 는 다이렉트 페이스트
             let action: PaletteViewModel.CommitAction = shift ? .copyOnly : .paste
@@ -229,8 +299,14 @@ final class PaletteController {
         case 17 where cmd: // ⌘T: 변환 붙여넣기
             viewModel.openTransform()
             return true
+        case 40 where cmd && shift: // ⌘⇧K: 페이스트 스택 비우기 (명시적 비움)
+            viewModel.clearStack()
+            return true
         case 40 where cmd: // ⌘K: 페이스트 스택에 담기/빼기
             viewModel.toggleStack()
+            return true
+        case 14 where cmd && shift: // ⌘⇧E: 은신 모드 토글 (수집 일시정지)
+            viewModel.toggleStealthMode()
             return true
         case 14 where cmd: // ⌘E: 이 항목의 출처 앱을 수집 제외
             viewModel.excludeSelectedItemApp()

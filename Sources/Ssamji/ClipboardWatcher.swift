@@ -10,6 +10,10 @@ final class ClipboardWatcher {
     /// M3 다이렉트 페이스트가 스스로 클립보드에 쓸 때 자기 수집을 방지하는 플래그
     var ignoreNextChange = false
 
+    /// 은신 모드: 수집만 일시정지 (changeCount 추적은 계속 — 은신 중 복사한 항목이
+    /// 해제 후 뒤늦게 수집되는 일이 없도록 변화를 소비하며 흘려보낸다)
+    var isPaused = false
+
     var onCapture: ((NSPasteboard) -> Void)?
 
     var isRunning: Bool { timer != nil }
@@ -36,9 +40,11 @@ final class ClipboardWatcher {
         lastChangeCount = pb.changeCount
 
         if ignoreNextChange {
+            // 은신 중에도 플래그는 소비한다 — 남겨두면 해제 후 첫 복사가 무시된다
             ignoreNextChange = false
             return
         }
+        guard !isPaused else { return }
         guard !PasteboardReader.shouldSkip(pb) else { return }
         onCapture?(pb)
     }

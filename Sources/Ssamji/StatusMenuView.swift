@@ -16,6 +16,17 @@ struct StatusMenuView: View {
         return days > 90 ? "무제한" : "\(days)일"
     }
 
+    /// 수집 상태 dot — 시맨틱 규칙: 수집 중 success / 멈춤(은신 포함) danger
+    private var collectionDotColor: Color {
+        if state.stealthMode { return SsamjiColor.danger }
+        return state.watcherRunning ? SsamjiColor.success : SsamjiColor.danger
+    }
+
+    private var collectionStatusLabel: String {
+        if state.stealthMode { return "은신 모드 — 수집 일시정지" }
+        return state.watcherRunning ? "수집 중" : "수집 꺼짐"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
@@ -24,14 +35,14 @@ struct StatusMenuView: View {
                     .frame(width: 20, height: 20)
                 Text("쌈지").font(.headline)
                 Spacer()
-                Text("v0.7.0 · M5").font(.caption).foregroundStyle(.secondary)
+                Text("v1.1.0 · 쌈지를 여미다").font(.caption).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {
                 Circle()
-                    .fill(state.watcherRunning ? Color.green : Color.red)
+                    .fill(collectionDotColor)
                     .frame(width: 8, height: 8)
-                Text(state.watcherRunning ? "수집 중" : "수집 꺼짐")
+                Text(collectionStatusLabel)
                     .font(.caption)
                 Spacer()
                 Text("\(state.totalCount)개 보관")
@@ -40,7 +51,7 @@ struct StatusMenuView: View {
             }
 
             if let error = state.lastError {
-                Text(error).font(.caption2).foregroundStyle(.red)
+                Text(error).font(.caption2).foregroundStyle(SsamjiColor.danger)
             }
 
             Divider()
@@ -111,6 +122,20 @@ struct StatusMenuView: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
 
+            Toggle(isOn: $state.restoreClipboardEnabled) {
+                Text("붙여넣은 뒤 원래 클립보드 복원 (1초 후)")
+                    .font(.caption)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+
+            Toggle(isOn: $state.stealthMode) {
+                Text("은신 모드 — 수집 일시정지 (팔레트 ⌘⇧E)")
+                    .font(.caption)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+
             Toggle(isOn: Binding(
                 get: { state.launchAtLogin },
                 set: { state.launchAtLogin = $0 }
@@ -156,7 +181,7 @@ struct StatusMenuView: View {
                 } else {
                     ForEach(state.excludedApps, id: \.self) { bundleID in
                         HStack {
-                            Circle().fill(.orange).frame(width: 6, height: 6)
+                            Circle().fill(SsamjiColor.gold).frame(width: 6, height: 6)
                             Text(AppState.appDisplayName(for: bundleID))
                                 .font(.caption)
                                 .lineLimit(1)
@@ -198,6 +223,8 @@ struct StatusMenuView: View {
         }
         .padding(14)
         .frame(width: 320)
+        // 상태창 전체 일괄 청자화 — 토글·버튼·슬라이더가 한 물감이 된다
+        .tint(SsamjiColor.accent)
         .onAppear {
             state.refresh()
             refreshPermissions()
@@ -217,7 +244,7 @@ struct StatusMenuView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Circle()
-                    .fill(ok ? Color.green : Color.orange)
+                    .fill(ok ? SsamjiColor.success : SsamjiColor.gold)
                     .frame(width: 8, height: 8)
                 Text(title).fontWeight(.medium)
                 Spacer()

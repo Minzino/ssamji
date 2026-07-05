@@ -10,7 +10,8 @@ struct SsamjiApp: App {
             StatusMenuView()
                 .environmentObject(state)
         } label: {
-            Image(nsImage: MenuBarIcon.image)
+            // 은신 모드면 '여며진' 복주머니 — 메뉴바만 봐도 수집 상태를 안다
+            Image(nsImage: state.stealthMode ? MenuBarIcon.stealthImage : MenuBarIcon.image)
         }
         .menuBarExtraStyle(.window)
     }

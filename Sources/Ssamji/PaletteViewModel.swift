@@ -140,18 +140,73 @@ final class PaletteViewModel: ObservableObject {
     @Published var transformVisible = false
     @Published var transformIndex = 0
 
-    // 페이스트 스택 (⌘K 담기, ⌘⏎ 순서대로 붙여넣기)
+    // 페이스트 스택 (⌘K 담기, ⌘⏎ 픽커로 붙여넣기, ⌘⇧K 비우기)
+    // 팔레트를 닫아도 유지된다 — 명시적 비우기·커밋 전까지 생존 (스택 2.0)
     @Published var stack: [ClipItem] = []
+
+    /// ⌘⏎ 스택 커밋 방식 — 구분자 4종 + 순차 모드
+    enum StackCommitOption: String, CaseIterable {
+        case newline
+        case space
+        case comma
+        case shellAnd
+        case sequential
+
+        /// 조인 구분자 (순차 모드는 nil)
+        var separator: String? {
+            switch self {
+            case .newline: return "\n"
+            case .space: return " "
+            case .comma: return ", "
+            case .shellAnd: return " && "
+            case .sequential: return nil
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .newline: return "개행으로 (한 줄씩)"
+            case .space: return "공백으로"
+            case .comma: return "콤마로 (a, b, c)"
+            case .shellAnd: return "&& 원라이너로"
+            case .sequential: return "하나씩 순차 붙여넣기 (⌘V 마다 다음)"
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .newline: return "arrow.turn.down.left"
+            case .space: return "arrow.left.and.right"
+            case .comma: return "list.bullet"
+            case .shellAnd: return "terminal"
+            case .sequential: return "list.number"
+            }
+        }
+    }
+
+    // 스택 커밋 픽커 (⌘⏎)
+    @Published var stackPickerVisible = false
+    @Published var stackPickerIndex = 0
 
     // 보드 삭제 확인 (⌘⇧⌫)
     @Published var confirmingBoardDelete = false
 
+    // ⌘P 보드 배정 성공 펄스 — 대상 보드 탭 캡슐만 450ms (PaletteView 의 TabPulse 리프가 소비)
+    @Published var pulsingBoardID: Int64?
+    private var pulseResetTask: Task<Void, Never>?
+
     private let store: Store
     var onCommit: ((ClipItem, CommitAction) -> Void)?
-    /// 변환/스택 텍스트를 붙여넣을 때 (원본 항목은 저장하지 않음)
+    /// 변환 텍스트를 붙여넣을 때 (원본 항목은 저장하지 않음)
     var onCommitText: ((String, CommitAction) -> Void)?
+    /// 페이스트 스택 붙여넣기 — 텍스트, 항목 수, 액션 (HUD 문구 '스택 N개 붙여넣음' 용)
+    var onCommitStack: ((String, Int, CommitAction) -> Void)?
+    /// 스택 순차 모드 시작 — 이후 사용자 ⌘V 마다 하나씩 소비 (아이디→비번 워크플로)
+    var onCommitStackSequential: (([String]) -> Void)?
     /// 선택 항목의 출처 앱을 수집 제외 목록에 추가 (⌘E)
     var onExcludeApp: ((ClipItem) -> Void)?
+    /// 은신 모드 토글 — 수집 일시정지 (⌘⇧E, AppState 가 배선)
+    var onToggleStealth: (() -> Void)?
 
     init(store: Store) {
         self.store = store
@@ -179,7 +234,8 @@ final class PaletteViewModel: ObservableObject {
     func reset() {
         reloadBoards()
         query = ""
-        stack = []
+        // 스택은 비우지 않는다 — 팔레트 재오픈 후에도 유지 (⌘⇧K·커밋으로만 비움)
+        stackPickerVisible = false
         confirmingBoardDelete = false
         search()
     }
@@ -242,14 +298,22 @@ final class PaletteViewModel: ObservableObject {
     }
 
     func deleteBoard(_ board: Board) {
-        try? store.deleteBoard(board)
+        do {
+            try store.deleteBoard(board)
+        } catch {
+            FeedbackHUD.shared.failure("보드 삭제 실패 — \(error.localizedDescription)")
+        }
         if selectedBoardID == board.id { selectedBoardID = nil }
         reloadBoards()
         search()
     }
 
     func toggleBoardSecret(_ board: Board) {
-        try? store.setBoardSecret(board, isSecret: !board.isSecret)
+        do {
+            try store.setBoardSecret(board, isSecret: !board.isSecret)
+        } catch {
+            FeedbackHUD.shared.failure("시크릿 설정 실패 — \(error.localizedDescription)")
+        }
         reloadBoards()
         reload(selecting: selectedItem?.uuid)
     }
@@ -288,11 +352,57 @@ final class PaletteViewModel: ObservableObject {
         }
     }
 
-    func commitStack(action: CommitAction = .paste) {
-        let texts = stack.compactMap(stackText(for:))
-        guard !texts.isEmpty else { return }
+    /// 명시적 비우기 (⌘⇧K / 힌트 클릭) — 스택 2.0 에서 유일한 수동 비움 경로
+    func clearStack() {
+        guard !stack.isEmpty else { return }
         stack = []
-        onCommitText?(texts.joined(separator: "\n"), action)
+        FeedbackHUD.shared.success("스택 비움")
+    }
+
+    // MARK: 스택 커밋 픽커 (⌘⏎ → 구분자/순차 선택 → ⏎)
+
+    static let stackCommitOptions = StackCommitOption.allCases
+
+    private static let stackCommitOptionKey = "stackCommitOption"
+
+    func openStackPicker() {
+        guard !stack.isEmpty else { return }
+        // 마지막으로 쓴 방식을 기본 선택 — ⌘⏎ ⏎ 두 타로 직전 방식 재사용
+        let saved = UserDefaults.standard.string(forKey: Self.stackCommitOptionKey)
+            .flatMap(StackCommitOption.init(rawValue:)) ?? .newline
+        stackPickerIndex = Self.stackCommitOptions.firstIndex(of: saved) ?? 0
+        stackPickerVisible = true
+    }
+
+    func closeStackPicker() {
+        stackPickerVisible = false
+    }
+
+    func stackPickerMove(by delta: Int) {
+        let count = Self.stackCommitOptions.count
+        guard count > 0 else { return }
+        stackPickerIndex = min(max(stackPickerIndex + delta, 0), count - 1)
+    }
+
+    func stackPickerCommit(action: CommitAction = .paste) {
+        guard Self.stackCommitOptions.indices.contains(stackPickerIndex) else {
+            closeStackPicker()
+            return
+        }
+        let option = Self.stackCommitOptions[stackPickerIndex]
+        let texts = stack.compactMap(stackText(for:))
+        guard !texts.isEmpty else {
+            closeStackPicker()
+            return
+        }
+        UserDefaults.standard.set(option.rawValue, forKey: Self.stackCommitOptionKey)
+        stack = []
+        closeStackPicker()
+        if let separator = option.separator {
+            onCommitStack?(texts.joined(separator: separator), texts.count, action)
+        } else {
+            onCommitStackSequential?(texts)
+        }
     }
 
     private func stackText(for item: ClipItem) -> String? {
@@ -321,6 +431,11 @@ final class PaletteViewModel: ObservableObject {
         onExcludeApp?(item)
     }
 
+    /// ⌘⇧E: 은신 모드 토글 (선택 항목과 무관 — 전역 수집 일시정지)
+    func toggleStealthMode() {
+        onToggleStealth?()
+    }
+
     // MARK: - 선택/확정
 
     func moveSelection(by delta: Int) {
@@ -328,7 +443,23 @@ final class PaletteViewModel: ObservableObject {
         let target = min(max(selectedIndex + delta, 0), results.count - 1)
         // 맨 위/아래에서 키를 계속 눌러도 재대입하지 않는다 (@Published 는 같은 값도 무효화를 발동)
         guard target != selectedIndex else { return }
-        selectedIndex = target
+        if keyRepeatActive {
+            // 키 자동반복 중: 트랜잭션 생성 자체 금지 (매듭 모션 — 반복은 완전 무애니메이션)
+            selectedIndex = target
+        } else {
+            // 단발 이동만 90ms easeOut 미세 램프 — 이 변경으로 바뀌는 뷰는 ResultRow 두 행의
+            // 배경/인디케이터뿐이라 사실상 리프 한정 (프리뷰는 디바운스 Task 로 트랜잭션 밖,
+            // scrollTo 는 PaletteView 쪽에서 트랜잭션 비활성으로 호출)
+            withAnimation(.easeOut(duration: 0.09)) {
+                selectedIndex = target
+            }
+        }
+    }
+
+    /// 선택만 이동 (커밋 없음) — 행 단일 클릭용. 클릭=선택, 더블클릭=붙여넣기.
+    func selectOnly(index: Int) {
+        guard results.indices.contains(index) else { return }
+        selectedIndex = index
     }
 
     func select(index: Int, action: CommitAction = .paste) {
@@ -391,7 +522,11 @@ final class PaletteViewModel: ObservableObject {
     func confirmCreateBoard() {
         let name = newBoardName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
-        guard let board = try? store.createBoard(name: name, isSecret: newBoardSecret) else {
+        let board: Board
+        do {
+            board = try store.createBoard(name: name, isSecret: newBoardSecret)
+        } catch {
+            FeedbackHUD.shared.failure("보드 생성 실패 — \(error.localizedDescription)")
             closePicker()
             return
         }
@@ -404,10 +539,21 @@ final class PaletteViewModel: ObservableObject {
     }
 
     private func assign(_ item: ClipItem, to boardID: Int64?) {
-        try? store.setBoard(boardID, for: item)
+        var succeeded = true
+        do {
+            try store.setBoard(boardID, for: item)
+        } catch {
+            succeeded = false
+            FeedbackHUD.shared.failure("보드 배정 실패 — \(error.localizedDescription)")
+        }
         closePicker()
         reloadBoards()
         reload(selecting: item.uuid)
+
+        // 배정 성공 시 대상 보드 탭 캡슐만 450ms 펄스 (보드 제거는 대상 탭이 없어 제외)
+        if succeeded, let boardID {
+            pulseBoardTab(boardID)
+        }
 
         // 시크릿 보드에 라벨 없이 들어가면 곧바로 라벨 입력을 띄운다 — 마스킹되면 뭔지 알 수 없으므로
         if let boardID,
@@ -417,16 +563,32 @@ final class PaletteViewModel: ObservableObject {
         }
     }
 
+    /// 펄스 트리거 — 450ms 뒤 해제 (연속 배정 시 타이머 리셋). 애니메이션 자체는
+    /// TabPulse 리프의 @State 에서만 발생 — 이 @Published 변경은 켜고/끄는 신호일 뿐이다.
+    private func pulseBoardTab(_ boardID: Int64) {
+        pulsingBoardID = boardID
+        pulseResetTask?.cancel()
+        pulseResetTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            self?.pulsingBoardID = nil
+        }
+    }
+
     // MARK: - 삭제 (⌘⌫)
 
     /// 전체 탭: 보드 소속 항목은 히스토리에서만 숨김(보드 공간 유지), 미소속은 완전 삭제.
     /// 보드 탭: 완전 삭제 (보드에서 빼기만 하려면 ⌘P → 보드에서 제거).
     func deleteSelection() {
         guard let item = selectedItem else { return }
-        if selectedBoardID == nil, item.boardId != nil {
-            try? store.hideFromHistory(item)
-        } else {
-            try? store.delete(item)
+        do {
+            if selectedBoardID == nil, item.boardId != nil {
+                try store.hideFromHistory(item)
+            } else {
+                try store.delete(item)
+            }
+        } catch {
+            FeedbackHUD.shared.failure("삭제 실패 — \(error.localizedDescription)")
         }
         let previousIndex = selectedIndex
         reload()
@@ -435,10 +597,21 @@ final class PaletteViewModel: ObservableObject {
 
     // MARK: - 변환 붙여넣기 (⌘T)
 
-    /// 텍스트 계열 항목에만 적용, JSON 정리는 유효한 JSON 일 때만 노출
-    var transformOptions: [PasteTransform] {
-        guard let item = selectedItem, let text = transformSourceText(item) else { return [] }
-        return PasteTransform.allCases.filter { $0.apply(to: text) != nil }
+    /// 텍스트 계열 항목에만 적용, 적용 불가 변환(예: JSON 아님)은 노출하지 않는다.
+    /// 오버레이가 열려 있는 동안 선택 항목이 바뀔 수 없으므로 openTransform() 에서 1회 계산해 캐시 —
+    /// 픽커 안 방향키마다 전체 변환 재계산(대형 텍스트 × 10종)을 피한다.
+    private(set) var transformOptions: [PasteTransform] = []
+
+    /// 선택된 변환의 결과 미리보기 (previewMono 용, 표시 상한 300자)
+    var transformPreview: String? {
+        guard transformVisible,
+              let item = selectedItem,
+              let text = transformSourceText(item),
+              transformOptions.indices.contains(transformIndex),
+              let result = transformOptions[transformIndex].apply(to: text)
+        else { return nil }
+        let capped = String(result.prefix(300))
+        return capped.count < result.count ? capped + "…" : capped
     }
 
     private func transformSourceText(_ item: ClipItem) -> String? {
@@ -449,6 +622,11 @@ final class PaletteViewModel: ObservableObject {
     }
 
     func openTransform() {
+        if let item = selectedItem, let text = transformSourceText(item) {
+            transformOptions = PasteTransform.allCases.filter { $0.apply(to: text) != nil }
+        } else {
+            transformOptions = []
+        }
         guard !transformOptions.isEmpty else { return }
         transformIndex = 0
         transformVisible = true
@@ -495,7 +673,11 @@ final class PaletteViewModel: ObservableObject {
             return
         }
         let trimmed = renameText.trimmingCharacters(in: .whitespaces)
-        try? store.setCustomTitle(trimmed.isEmpty ? nil : trimmed, for: item)
+        do {
+            try store.setCustomTitle(trimmed.isEmpty ? nil : trimmed, for: item)
+        } catch {
+            FeedbackHUD.shared.failure("라벨 저장 실패 — \(error.localizedDescription)")
+        }
         renameVisible = false
         reload(selecting: item.uuid)
     }
