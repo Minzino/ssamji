@@ -207,8 +207,8 @@ struct PaletteView: View {
     private var resultList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                // Lazy 컨테이너는 selected 변화 전파를 건너뛸 수 있어 일반 VStack 사용 (결과는 최대 50개)
-                VStack(spacing: 2) {
+                // LazyVStack: 보이는 행만 레이아웃 (행이 Equatable 값 구조체라 선택 하이라이트 전파도 안전)
+                LazyVStack(spacing: 2) {
                     ForEach(Array(vm.results.enumerated()), id: \.offset) { index, item in
                         ResultRow(
                             item: item,
@@ -226,8 +226,8 @@ struct PaletteView: View {
                 .padding(6)
             }
             .onChange(of: vm.selectedIndex) { _, newIndex in
-                // 반복 입력 중 애니메이션이 쌓이며 밀리는 것 방지 — 즉시 스크롤
-                proxy.scrollTo(newIndex, anchor: .center)
+                // anchor 없이 최소 이동 스크롤 — 매번 중앙 재정렬(전체 레이아웃)보다 훨씬 싸다
+                proxy.scrollTo(newIndex)
             }
             .overlay {
                 if vm.results.isEmpty {
