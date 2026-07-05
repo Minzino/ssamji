@@ -241,7 +241,10 @@ struct PaletteView: View {
                 .font(SsamjiFont.searchField)
                 .focused($searchFocused)
             if !vm.results.isEmpty {
-                Text("\(vm.results.count)개")
+                // 로드된 수 / 전체 매칭 수 — 상한(50)에 걸려 있으면 정직하게 표기, ↓로 더 불러옴
+                Text(vm.hasMore || vm.results.count < vm.totalMatching
+                     ? "\(vm.results.count) / \(vm.totalMatching)개"
+                     : "\(vm.results.count)개")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

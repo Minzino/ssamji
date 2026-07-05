@@ -157,6 +157,35 @@ final class Store {
         }
     }
 
+    /// 현재 쿼리/탭 조건의 전체 매칭 수 — 팔레트 카운터("50 / 197개")와 페이지네이션 판단용
+    func countItems(matching query: String, boardID: Int64?) throws -> Int {
+        try dbQueue.read { db in
+            if query.isEmpty {
+                var request = ClipItem.all()
+                if let boardID {
+                    request = request.filter(Column("boardId") == boardID)
+                } else {
+                    request = request.filter(Column("deletedAt") == nil)
+                }
+                return try request.fetchCount(db)
+            }
+            let pattern = FTS5Pattern(matchingAllPrefixesIn: query)
+            var sql = """
+                SELECT COUNT(*) FROM items
+                JOIN items_fts ON items_fts.rowid = items.id
+                WHERE items_fts MATCH ?
+                """
+            var arguments: [DatabaseValueConvertible?] = [pattern]
+            if let boardID {
+                sql += " AND items.boardId = ?"
+                arguments.append(boardID)
+            } else {
+                sql += " AND items.deletedAt IS NULL"
+            }
+            return try Int.fetchOne(db, sql: sql, arguments: StatementArguments(arguments)) ?? 0
+        }
+    }
+
     // MARK: - 핀보드
 
     func boards() throws -> [Board] {

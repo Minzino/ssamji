@@ -247,12 +247,40 @@ final class PaletteViewModel: ObservableObject {
         }
     }
 
+    // 페이지네이션: 처음 50개만 로드하고, 바닥에서 ↓ 로 50개씩 추가 (상한 300 — 페이지 경계 재배치 비용 상한)
+    @Published var totalMatching = 0
+    private var pageLimit = 50
+    private let pageSize = 50
+    private let pageLimitMax = 300
+
+    /// 더 불러올 항목이 남아 있는가 (카운터 표시 · 바닥 페이지네이션 판단)
+    var hasMore: Bool {
+        results.count < totalMatching && pageLimit < pageLimitMax
+    }
+
     func search() {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        results = (try? store.items(matching: trimmed, boardID: selectedBoardID, limit: 50)) ?? []
+        pageLimit = pageSize // 쿼리/탭이 바뀌면 첫 페이지부터
+        fetchResults()
         selectedIndex = 0
         secretRevealed = false
         previewItem = selectedItem // 목록 갱신 직후엔 즉시 표시
+    }
+
+    private func fetchResults() {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        results = (try? store.items(matching: trimmed, boardID: selectedBoardID, limit: pageLimit)) ?? []
+        totalMatching = (try? store.countItems(matching: trimmed, boardID: selectedBoardID)) ?? results.count
+    }
+
+    /// 바닥에서 ↓ — 다음 페이지를 이어 붙이고 선택을 한 칸 내린다
+    private func loadNextPage() {
+        guard hasMore else { return }
+        let anchor = selectedItem?.uuid
+        pageLimit = min(pageLimit + pageSize, pageLimitMax)
+        fetchResults()
+        if let anchor, let index = results.firstIndex(where: { $0.uuid == anchor }) {
+            selectedIndex = min(index + 1, results.count - 1)
+        }
     }
 
     private func schedulePreviewUpdate() {
@@ -272,8 +300,7 @@ final class PaletteViewModel: ObservableObject {
 
     /// 결과를 다시 읽되 특정 항목(uuid)의 선택을 유지한다 — 라벨/보드 변경 후 선택이 튀지 않게.
     func reload(selecting uuid: String? = nil) {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        results = (try? store.items(matching: trimmed, boardID: selectedBoardID, limit: 50)) ?? []
+        fetchResults()
         if let uuid, let index = results.firstIndex(where: { $0.uuid == uuid }) {
             selectedIndex = index
         } else {
@@ -440,6 +467,11 @@ final class PaletteViewModel: ObservableObject {
 
     func moveSelection(by delta: Int) {
         guard !results.isEmpty else { return }
+        // 바닥 너머로 밀면 다음 페이지 로드 (전체 197개 중 50개만 로드된 상태 등)
+        if delta > 0, selectedIndex >= results.count - 1, hasMore {
+            loadNextPage()
+            return
+        }
         let target = min(max(selectedIndex + delta, 0), results.count - 1)
         // 맨 위/아래에서 키를 계속 눌러도 재대입하지 않는다 (@Published 는 같은 값도 무효화를 발동)
         guard target != selectedIndex else { return }
