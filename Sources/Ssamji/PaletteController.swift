@@ -105,10 +105,17 @@ final class PaletteController {
 
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
             guard let self, self.isVisible else { return event }
             if event.type == .flagsChanged {
                 self.handleFlags(event)
+                return event
+            }
+            if event.type == .keyUp {
+                // 방향키를 뗐을 때 — 보류했던 프리뷰 갱신 재개
+                if event.keyCode == 125 || event.keyCode == 126 {
+                    self.viewModel.endKeyRepeat()
+                }
                 return event
             }
             return self.handle(event) ? nil : event
@@ -198,11 +205,13 @@ final class PaletteController {
         case 53: // esc
             hide()
             return true
-        case 125: // down
-            viewModel.moveSelection(by: 1)
-            return true
-        case 126: // up
-            viewModel.moveSelection(by: -1)
+        case 125, 126: // down / up
+            // 주의: 여기서 NSApp.nextEvent 로 큐를 코얼레싱하면 안 된다 — nextEvent 는
+            // 런루프를 펌핑해 핸들러 안에서 SwiftUI 플러시를 반복 실행시킨다 (1초급 블로킹, 프로파일 확인).
+            // 키당 비용이 반복 간격보다 낮아진 지금은 코얼레싱 자체가 불필요하다.
+            // 자동반복 중에는 프리뷰 갱신 보류 (keyUp 에서 재개) — 이동 중 대형 조판 개입 차단
+            viewModel.keyRepeatActive = event.isARepeat
+            viewModel.moveSelection(by: event.keyCode == 125 ? 1 : -1)
             return true
         case 36 where cmd, 76 where cmd: // ⌘⏎: 페이스트 스택 순서대로 붙여넣기
             viewModel.commitStack(action: shift ? .copyOnly : .paste)

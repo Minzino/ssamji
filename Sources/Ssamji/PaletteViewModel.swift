@@ -55,22 +55,66 @@ final class PaletteViewModel: ObservableObject {
     private(set) var previewContent: TextPreviewContent = .none
     private var previewDebounce: Task<Void, Never>?
 
+    /// 키 자동반복(꾹 누름) 중 — 이동 도중 대형 프리뷰 조판이 끼어들어 큐를 막는 것 방지.
+    /// 컨트롤러가 keyDown(isARepeat)/keyUp 으로 갱신한다.
+    var keyRepeatActive = false
+
+    /// 키를 뗐을 때 — 보류했던 프리뷰 갱신을 재개
+    func endKeyRepeat() {
+        guard keyRepeatActive else { return }
+        keyRepeatActive = false
+        schedulePreviewUpdate()
+    }
+
     private func renderPreviewContent() {
         guard let item = previewItem, item.kind == .text else {
             previewContent = .none
             return
         }
-        // 표시 상한 5천 자 — 바닥/정지 시 프리뷰 조판이 입력을 막는 히컵 방지 (붙여넣기는 전체)
-        let cap = 5_000
         let text = item.text ?? ""
         if let pretty = PasteTransform.prettyJSON(text) {
-            previewContent = .json(String(pretty.prefix(cap)), truncated: pretty.count > cap)
+            let (display, truncated) = Self.truncateForDisplay(pretty)
+            previewContent = .json(display, truncated: truncated)
         } else if CodeHighlighter.looksLikeCode(text) {
-            let capped = String(text.prefix(cap))
-            previewContent = .code(CodeHighlighter.highlight(capped), truncated: text.count > cap)
+            let (display, truncated) = Self.truncateForDisplay(text)
+            previewContent = .code(CodeHighlighter.highlight(display), truncated: truncated)
         } else {
-            previewContent = .plain(String(text.prefix(cap)), truncated: text.count > cap)
+            let (display, truncated) = Self.truncateForDisplay(text)
+            previewContent = .plain(display, truncated: truncated)
         }
+    }
+
+    /// 표시용 텍스트 절단 — 조판 비용 기준 상한 (붙여넣기는 항상 전체 원본).
+    /// 문자 상한(5,000자)에 더해 줄 수(120줄)·줄당 길이(400자)를 제한한다:
+    /// 한 줄이 수천 자면 단일 CTLine 통조판이 폭주해 키 입력을 막는다 (프로파일 확인 병목).
+    /// 크기 비교는 utf16.count — 246KB 텍스트에서 그래핌 순회 O(n)을 피한다.
+    private static func truncateForDisplay(_ text: String) -> (text: String, truncated: Bool) {
+        let charCap = 5_000
+        let lineCap = 120
+        let lineLengthCap = 400
+
+        var truncated = false
+        var working = text
+        if text.utf16.count > charCap {
+            working = String(text.prefix(charCap))
+            truncated = true
+        }
+        var lines = working.split(separator: "\n", omittingEmptySubsequences: false)
+        if lines.count > lineCap {
+            lines.removeSubrange(lineCap...)
+            truncated = true
+        }
+        var clipped: [Substring] = []
+        clipped.reserveCapacity(lines.count)
+        for line in lines {
+            if line.utf16.count > lineLengthCap {
+                clipped.append(line.prefix(lineLengthCap))
+                truncated = true
+            } else {
+                clipped.append(line)
+            }
+        }
+        return (clipped.joined(separator: "\n"), truncated)
     }
 
     // 보드
@@ -157,6 +201,8 @@ final class PaletteViewModel: ObservableObject {
 
     private func schedulePreviewUpdate() {
         previewDebounce?.cancel()
+        // 자동반복 이동 중에는 프리뷰를 갱신하지 않는다 — keyUp 에서 endKeyRepeat() 가 재개
+        guard !keyRepeatActive else { return }
         let target = selectedItem
         previewDebounce = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 90_000_000)

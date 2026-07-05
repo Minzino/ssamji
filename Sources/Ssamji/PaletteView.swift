@@ -8,28 +8,32 @@ struct PaletteView: View {
     @State private var scrollWindowTop = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            searchBar
-            boardTabs
-            Divider()
-            // HSplitView(NSSplitView 브리지)는 레이아웃 재귀를 유발해 제거 — 고정 폭 HStack
-            HStack(spacing: 0) {
-                resultList
-                    .frame(width: 300)
-                Divider()
-                previewPane
-                    .frame(maxWidth: .infinity)
-            }
-            Divider()
-            hintBar
-        }
-        .frame(width: 720, height: 440)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
+        // 배경/테두리/오버레이를 .background/.overlay 수정자 대신 ZStack 형제로 배치 —
+        // secondary layer 의 SecondaryLayoutGeometryQuery 가 키 입력마다 전체 트리
+        // sizeThatFits 재귀를 강제하던 것을 제거 (크기는 720×440 상수라 질의가 불필요).
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(.separator, lineWidth: 1)
-        )
-        .overlay { overlayLayer }
+            VStack(spacing: 0) {
+                searchBar
+                boardTabs
+                Divider()
+                // HSplitView(NSSplitView 브리지)는 레이아웃 재귀를 유발해 제거 — 고정 폭 HStack
+                HStack(spacing: 0) {
+                    resultList
+                        .frame(width: 300)
+                    Divider()
+                    previewPane
+                        .frame(maxWidth: .infinity)
+                }
+                Divider()
+                hintBar
+            }
+            overlayLayer
+        }
+        .frame(width: 720, height: 440)
         .onAppear { searchFocused = true }
         // 오버레이가 열릴 때 검색창 포커스를 명시적으로 해제해야 타이핑이 검색창으로 새지 않는다
         .onChange(of: vm.renameVisible) { _, visible in
@@ -210,8 +214,9 @@ struct PaletteView: View {
     private var resultList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                // LazyVStack: 보이는 행만 레이아웃 (행이 Equatable 값 구조체라 선택 하이라이트 전파도 안전)
-                LazyVStack(spacing: 2) {
+                // 일반 VStack: 결과가 최대 50개라 상시 실체화가 싸고,
+                // LazyVStack 의 역방향 스크롤 재실체화 비용이 없다
+                VStack(spacing: 2) {
                     ForEach(Array(vm.results.enumerated()), id: \.offset) { index, item in
                         ResultRow(
                             item: item,
@@ -261,9 +266,14 @@ struct PaletteView: View {
             if let item = vm.previewItem {
                 ScrollView {
                     preview(for: item)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // 프리뷰 콘텐츠 폭은 상수: 391 = 720(팔레트) − 300(리스트) − 1(Divider) − 28(패딩 14×2)
+                        // 폭을 고정하면 StackLayout 의 다중 width 프로브(min/ideal/max)가 같은 텍스트를
+                        // 레이아웃 패스당 4회 재조판하던 것이 캐시 적중으로 최대 1회로 준다 (프로파일 확인)
+                        .frame(width: 391, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(14)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 metaBar(for: item)
             } else {
@@ -303,8 +313,8 @@ struct PaletteView: View {
     private func unmaskedPreview(for item: ClipItem) -> some View {
         switch item.kind {
         case .text:
-            // 사전 계산된 콘텐츠 + uuid 기반 Equatable — 같은 항목이면 재조판을 완전히 건너뛴다
-            TextPreviewBody(uuid: item.uuid, content: vm.previewContent)
+            // 사전 계산된 콘텐츠 + uuid/updatedAt 기반 Equatable — 같은 항목이면 재조판을 완전히 건너뛴다
+            TextPreviewBody(uuid: item.uuid, updatedAt: item.updatedAt, content: vm.previewContent)
                 .equatable()
         case .link:
             // 네트워크 페치 없이 즉시 뜨는 정적 링크 카드 (사내망 링크에서 타임아웃 대기 방지)
@@ -522,19 +532,22 @@ private struct ResultRow: View, Equatable {
             selected ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.clear),
             in: RoundedRectangle(cornerRadius: 7)
         )
-        .animation(.easeOut(duration: 0.1), value: selected)
+        // 선택 하이라이트는 즉시 반영 — 키 반복(30ms) 중 100ms 애니메이션 트랜잭션이
+        // 계속 중첩돼 CA 커밋/AttributeGraph 갱신 비용을 만들던 것 제거
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
     }
 }
 
-/// 텍스트 프리뷰 본문 — uuid 로만 동등성 판단해, 같은 항목인 동안 CoreText 재조판을 차단
+/// 텍스트 프리뷰 본문 — uuid+updatedAt 으로 동등성 판단해, 같은 항목인 동안 CoreText 재조판을 차단
+/// (updatedAt 은 같은 uuid 의 내용이 갱신됐을 때 낡은 조판이 남지 않게 하는 안전판)
 private struct TextPreviewBody: View, Equatable {
     let uuid: String
+    let updatedAt: Date
     let content: PaletteViewModel.TextPreviewContent
 
     static func == (lhs: TextPreviewBody, rhs: TextPreviewBody) -> Bool {
-        lhs.uuid == rhs.uuid
+        lhs.uuid == rhs.uuid && lhs.updatedAt == rhs.updatedAt
     }
 
     var body: some View {
