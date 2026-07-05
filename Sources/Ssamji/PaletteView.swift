@@ -4,6 +4,8 @@ import SwiftUI
 struct PaletteView: View {
     @EnvironmentObject private var vm: PaletteViewModel
     @FocusState private var searchFocused: Bool
+    /// 현재 보이는 범위의 시작 인덱스 추정 — 범위를 벗어날 때만 scrollTo 호출
+    @State private var scrollWindowTop = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -226,8 +228,19 @@ struct PaletteView: View {
                 .padding(6)
             }
             .onChange(of: vm.selectedIndex) { _, newIndex in
-                // anchor 없이 최소 이동 스크롤 — 매번 중앙 재정렬(전체 레이아웃)보다 훨씬 싸다
-                proxy.scrollTo(newIndex)
+                // scrollTo 는 호출 자체가 LazyVStack 전체 측정을 유발 (프로파일: 키당 ~14ms)
+                // → 선택이 보이는 창(약 9행)을 벗어날 때만 호출
+                let window = 8
+                if newIndex < scrollWindowTop {
+                    scrollWindowTop = newIndex
+                    proxy.scrollTo(newIndex)
+                } else if newIndex > scrollWindowTop + window {
+                    scrollWindowTop = newIndex - window
+                    proxy.scrollTo(newIndex)
+                }
+            }
+            .onChange(of: vm.results.count) { _, _ in
+                scrollWindowTop = 0
             }
             .overlay {
                 if vm.results.isEmpty {
