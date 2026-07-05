@@ -31,7 +31,9 @@ final class PaletteViewModel: ObservableObject {
     @Published var results: [ClipItem] = []
     @Published var selectedIndex = 0 {
         didSet {
-            secretRevealed = false
+            // 같은 값 재대입(맨 끝에서 키 반복 등)에는 아무것도 하지 않는다 — 무효화 폭주 방지
+            guard oldValue != selectedIndex else { return }
+            if secretRevealed { secretRevealed = false }
             schedulePreviewUpdate()
         }
     }
@@ -128,8 +130,11 @@ final class PaletteViewModel: ObservableObject {
         let target = selectedItem
         previewDebounce = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 90_000_000)
-            guard !Task.isCancelled else { return }
-            self?.previewItem = target
+            guard !Task.isCancelled, let self else { return }
+            // 이미 같은 항목을 보여주고 있으면 다시 그리지 않는다
+            if self.previewItem?.uuid != target?.uuid {
+                self.previewItem = target
+            }
         }
     }
 
@@ -244,7 +249,10 @@ final class PaletteViewModel: ObservableObject {
 
     func moveSelection(by delta: Int) {
         guard !results.isEmpty else { return }
-        selectedIndex = min(max(selectedIndex + delta, 0), results.count - 1)
+        let target = min(max(selectedIndex + delta, 0), results.count - 1)
+        // 맨 위/아래에서 키를 계속 눌러도 재대입하지 않는다 (@Published 는 같은 값도 무효화를 발동)
+        guard target != selectedIndex else { return }
+        selectedIndex = target
     }
 
     func select(index: Int, action: CommitAction = .paste) {
