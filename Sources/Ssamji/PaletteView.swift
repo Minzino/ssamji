@@ -308,12 +308,12 @@ struct PaletteView: View {
             } else {
                 let text = item.text ?? ""
                 VStack(alignment: .leading, spacing: 6) {
-                    if text.count > 20_000 {
+                    if text.count > 5_000 {
                         Text("긴 텍스트 — 앞부분만 표시 (붙여넣기는 전체)")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
-                    Text(String(text.prefix(20_000)))
+                    Text(String(text.prefix(5_000)))
                         .font(.system(.body, design: .monospaced))
                         .textSelection(.enabled)
                 }
