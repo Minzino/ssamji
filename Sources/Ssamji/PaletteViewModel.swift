@@ -38,10 +38,37 @@ final class PaletteViewModel: ObservableObject {
         }
     }
 
+    /// 텍스트 프리뷰의 사전 계산 결과 — body 에서 매번 하이라이트/JSON 정리를 다시 돌리면
+    /// 키 입력마다 CoreText 전체 재조판이 일어난다 (프로파일로 확인된 최대 병목)
+    enum TextPreviewContent {
+        case json(String)
+        case code(AttributedString)
+        case plain(String, truncated: Bool)
+        case none
+    }
+
     /// 프리뷰에 실제로 그려지는 항목 — 빠른 스크롤 중에는 갱신을 미뤄서(디바운스) 히치를 막는다.
     /// 붙여넣기 등 동작은 항상 selectedItem(즉시값)을 쓴다.
-    @Published var previewItem: ClipItem?
+    @Published var previewItem: ClipItem? {
+        didSet { renderPreviewContent() }
+    }
+    private(set) var previewContent: TextPreviewContent = .none
     private var previewDebounce: Task<Void, Never>?
+
+    private func renderPreviewContent() {
+        guard let item = previewItem, item.kind == .text else {
+            previewContent = .none
+            return
+        }
+        let text = item.text ?? ""
+        if let pretty = PasteTransform.prettyJSON(text) {
+            previewContent = .json(String(pretty.prefix(20_000)))
+        } else if CodeHighlighter.looksLikeCode(text) {
+            previewContent = .code(CodeHighlighter.highlight(text))
+        } else {
+            previewContent = .plain(String(text.prefix(5_000)), truncated: text.count > 5_000)
+        }
+    }
 
     // 보드
     @Published var boards: [Board] = []

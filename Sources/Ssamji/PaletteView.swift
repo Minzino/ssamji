@@ -289,37 +289,9 @@ struct PaletteView: View {
     private func unmaskedPreview(for item: ClipItem) -> some View {
         switch item.kind {
         case .text:
-            // 유효한 JSON 이면 자동으로 정리해서 보여준다
-            if let pretty = PasteTransform.prettyJSON(item.text ?? "") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("JSON", systemImage: "curlybraces")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(pretty)
-                        .font(.system(.callout, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-            } else if CodeHighlighter.looksLikeCode(item.text ?? "") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("코드", systemImage: "chevron.left.forwardslash.chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(CodeHighlighter.highlight(item.text ?? ""))
-                        .textSelection(.enabled)
-                }
-            } else {
-                let text = item.text ?? ""
-                VStack(alignment: .leading, spacing: 6) {
-                    if text.count > 5_000 {
-                        Text("긴 텍스트 — 앞부분만 표시 (붙여넣기는 전체)")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    Text(String(text.prefix(5_000)))
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-            }
+            // 사전 계산된 콘텐츠 + uuid 기반 Equatable — 같은 항목이면 재조판을 완전히 건너뛴다
+            TextPreviewBody(uuid: item.uuid, content: vm.previewContent)
+                .equatable()
         case .link:
             // 네트워크 페치 없이 즉시 뜨는 정적 링크 카드 (사내망 링크에서 타임아웃 대기 방지)
             VStack(alignment: .leading, spacing: 10) {
@@ -539,6 +511,51 @@ private struct ResultRow: View, Equatable {
         .animation(.easeOut(duration: 0.1), value: selected)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+    }
+}
+
+/// 텍스트 프리뷰 본문 — uuid 로만 동등성 판단해, 같은 항목인 동안 CoreText 재조판을 차단
+private struct TextPreviewBody: View, Equatable {
+    let uuid: String
+    let content: PaletteViewModel.TextPreviewContent
+
+    static func == (lhs: TextPreviewBody, rhs: TextPreviewBody) -> Bool {
+        lhs.uuid == rhs.uuid
+    }
+
+    var body: some View {
+        switch content {
+        case .json(let pretty):
+            VStack(alignment: .leading, spacing: 6) {
+                Label("JSON", systemImage: "curlybraces")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(pretty)
+                    .font(.system(.callout, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+        case .code(let highlighted):
+            VStack(alignment: .leading, spacing: 6) {
+                Label("코드", systemImage: "chevron.left.forwardslash.chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(highlighted)
+                    .textSelection(.enabled)
+            }
+        case .plain(let text, let truncated):
+            VStack(alignment: .leading, spacing: 6) {
+                if truncated {
+                    Text("긴 텍스트 — 앞부분만 표시 (붙여넣기는 전체)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Text(text)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+        case .none:
+            EmptyView()
+        }
     }
 }
 
