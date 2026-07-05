@@ -10,11 +10,13 @@ struct PaletteView: View {
             searchBar
             boardTabs
             Divider()
-            HSplitView {
+            // HSplitView(NSSplitView 브리지)는 레이아웃 재귀를 유발해 제거 — 고정 폭 HStack
+            HStack(spacing: 0) {
                 resultList
-                    .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
+                    .frame(width: 300)
+                Divider()
                 previewPane
-                    .frame(minWidth: 300, maxWidth: .infinity)
+                    .frame(maxWidth: .infinity)
             }
             Divider()
             hintBar

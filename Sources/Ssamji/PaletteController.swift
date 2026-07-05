@@ -61,6 +61,9 @@ final class PaletteController {
             .environmentObject(viewModel)
 
         let hosting = NSHostingView(rootView: content)
+        // 팔레트는 720×440 고정 — SwiftUI 내용물 크기로 제약을 재계산하지 않는다.
+        // (기본값이면 키 입력마다 전체 뷰 그래프 sizeThatFits 가 돌아 레이아웃 히치 발생)
+        hosting.sizingOptions = []
         let p = PalettePanel(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 440),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -68,6 +71,7 @@ final class PaletteController {
             defer: false
         )
         p.contentView = hosting
+        hosting.frame = NSRect(x: 0, y: 0, width: 720, height: 440)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
