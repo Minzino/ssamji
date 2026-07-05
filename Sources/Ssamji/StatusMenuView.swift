@@ -35,7 +35,7 @@ struct StatusMenuView: View {
                     .frame(width: 20, height: 20)
                 Text("쌈지").font(.headline)
                 Spacer()
-                Text("v1.1.0 · 쌈지를 여미다").font(.caption).foregroundStyle(.secondary)
+                Text("v1.2.0 · 그물과 매듭").font(.caption).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 6) {

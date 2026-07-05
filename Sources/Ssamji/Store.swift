@@ -82,7 +82,119 @@ final class Store {
             }
         }
 
+        migrator.registerMigration("v4-trigram") { db in
+            // 부분 문자열 검색: unicode61 은 '토큰 접두어'만 매칭해 단어 중간·URL 조각·
+            // 한글 어절 중간이 안 잡힌다 → trigram 토크나이저로 재생성 (substring 매칭).
+            // synchronize 가 만든 트리거를 반드시 먼저 지워야 재생성 시 이름 충돌이 없다 (v3 전례)
+            try db.dropFTS5SynchronizationTriggers(forTable: "items_fts")
+            try db.drop(table: "items_fts")
+            try db.create(virtualTable: "items_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "items") // 기존 행 자동 백필 (무손실)
+                t.tokenizer = FTS5TokenizerDescriptor(components: ["trigram"])
+                t.column("title")
+                t.column("text")
+                t.column("customTitle")
+            }
+        }
+
         try migrator.migrate(dbQueue)
+    }
+
+    // MARK: - 검색 쿼리 빌더
+
+    /// trigram 은 3 유니코드 스칼라 미만의 쿼리에서 토큰이 0개라 무조건 0건 —
+    /// 그런 term 이 하나라도 있으면 items 원본 테이블 LIKE 로 폴백한다
+    /// (FTS 테이블 경유 LIKE 는 풀스캔으로 오히려 느림 — 실측 77ms vs 4ms).
+    private struct SearchQuery {
+        let joinFTS: Bool
+        let whereSQL: String
+        let arguments: [DatabaseValueConvertible?]
+    }
+
+    /// 공백으로 term 분리 (AND 결합)
+    private static func searchTerms(_ query: String) -> [String] {
+        query.split(whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    /// 모든 term 이 trigram 최소 길이(3 스칼라) 이상인가
+    private static func isFTSEligible(_ terms: [String]) -> Bool {
+        terms.allSatisfy { $0.unicodeScalars.count >= 3 }
+    }
+
+    /// trigram FTS5 패턴: 각 term 을 쌍따옴표 phrase 로 (phrase 자체가 substring 의미 —
+    /// 접두어 * 불필요). 내부 쌍따옴표는 "" 로 이스케이프해 문법 오류 방지.
+    private static func ftsPattern(for terms: [String]) -> String {
+        terms
+            .map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+            .joined(separator: " AND ")
+    }
+
+    /// LIKE 패턴: \, %, _ 를 \ 이스케이프 (ESCAPE '\' 와 짝)
+    private static func likePattern(for term: String) -> String {
+        var escaped = term.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "%", with: "\\%")
+        escaped = escaped.replacingOccurrences(of: "_", with: "\\_")
+        return "%" + escaped + "%"
+    }
+
+    private static func buildSearchQuery(_ query: String, boardID: Int64?) -> SearchQuery {
+        let terms = searchTerms(query)
+        var clauses: [String] = []
+        var arguments: [DatabaseValueConvertible?] = []
+        var joinFTS = false
+        if !terms.isEmpty {
+            if isFTSEligible(terms) {
+                joinFTS = true
+                clauses.append("items_fts MATCH ?")
+                arguments.append(ftsPattern(for: terms))
+            } else {
+                for term in terms {
+                    let pattern = likePattern(for: term)
+                    clauses.append("""
+                        (items.title LIKE ? ESCAPE '\\' \
+                        OR items.text LIKE ? ESCAPE '\\' \
+                        OR items.customTitle LIKE ? ESCAPE '\\')
+                        """)
+                    arguments.append(contentsOf: [pattern, pattern, pattern])
+                }
+            }
+        }
+        // 보드는 독립 공간 — 보드 탭에서는 히스토리 숨김(deletedAt)과 무관하게 소속 항목을 보여준다
+        if let boardID {
+            clauses.append("items.boardId = ?")
+            arguments.append(boardID)
+        } else {
+            clauses.append("items.deletedAt IS NULL")
+        }
+        return SearchQuery(
+            joinFTS: joinFTS,
+            whereSQL: clauses.joined(separator: " AND "),
+            arguments: arguments
+        )
+    }
+
+    private static func fetchItems(_ db: Database, _ q: SearchQuery, limit: Int) throws -> [ClipItem] {
+        let from = q.joinFTS
+            ? "FROM items JOIN items_fts ON items_fts.rowid = items.id"
+            : "FROM items"
+        var arguments = q.arguments
+        arguments.append(limit)
+        return try ClipItem.fetchAll(
+            db,
+            sql: "SELECT items.* \(from) WHERE \(q.whereSQL) ORDER BY items.updatedAt DESC LIMIT ?",
+            arguments: StatementArguments(arguments)
+        )
+    }
+
+    private static func countMatches(_ db: Database, _ q: SearchQuery) throws -> Int {
+        let from = q.joinFTS
+            ? "FROM items JOIN items_fts ON items_fts.rowid = items.id"
+            : "FROM items"
+        return try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) \(from) WHERE \(q.whereSQL)",
+            arguments: StatementArguments(q.arguments)
+        ) ?? 0
     }
 
     /// 저장. 같은 checksum 이 이미 있으면 새로 만들지 않고 updatedAt 만 끌어올린다(최근 항목으로 부상).
@@ -113,38 +225,28 @@ final class Store {
         }
     }
 
-    /// 목록 조회: 쿼리가 비면 최근순, 있으면 FTS5 전문검색.
-    /// 보드는 독립 공간 — 보드 탭(boardID != nil)에서는 히스토리 숨김(deletedAt)과 무관하게 소속 항목을 보여준다.
+    /// 목록 조회: 쿼리가 비면 최근순, 전 term ≥3자면 trigram FTS5 substring 검색,
+    /// 그 외(짧은 한글 등)는 items 테이블 LIKE 폴백 — searchPage 와 동일한 빌더로 결과 일관성 보장.
     func items(matching query: String, boardID: Int64?, limit: Int = 50) throws -> [ClipItem] {
         try dbQueue.read { db in
-            if query.isEmpty {
-                var request = ClipItem
-                    .order(Column("updatedAt").desc)
-                    .limit(limit)
-                if let boardID {
-                    request = request.filter(Column("boardId") == boardID)
-                } else {
-                    request = request.filter(Column("deletedAt") == nil)
-                }
-                return try request.fetchAll(db)
-            }
+            try Self.fetchItems(db, Self.buildSearchQuery(query, boardID: boardID), limit: limit)
+        }
+    }
 
-            let pattern = FTS5Pattern(matchingAllPrefixesIn: query)
-            var sql = """
-                SELECT items.* FROM items
-                JOIN items_fts ON items_fts.rowid = items.id
-                WHERE items_fts MATCH ?
-                """
-            var arguments: [DatabaseValueConvertible?] = [pattern]
-            if let boardID {
-                sql += " AND items.boardId = ?"
-                arguments.append(boardID)
-            } else {
-                sql += " AND items.deletedAt IS NULL"
-            }
-            sql += " ORDER BY items.updatedAt DESC LIMIT ?"
-            arguments.append(limit)
-            return try ClipItem.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+    /// 팔레트 검색 페이지: 단일 read 블록에서 fetch + count 를 함께 실행 —
+    /// 락 1회 + 동일 스냅샷이라 "50 / 197개" 카운터와 결과가 어긋나지 않는다.
+    func searchPage(matching query: String, boardID: Int64?, limit: Int = 50) throws -> (items: [ClipItem], total: Int) {
+        try dbQueue.read { db in
+            let q = Self.buildSearchQuery(query, boardID: boardID)
+            return (try Self.fetchItems(db, q, limit: limit), try Self.countMatches(db, q))
+        }
+    }
+
+    /// 타이핑 핫패스용 비동기판 — 메인스레드를 막지 않는다 (디바운스된 검색 전용)
+    func searchPage(matching query: String, boardID: Int64?, limit: Int = 50) async throws -> (items: [ClipItem], total: Int) {
+        try await dbQueue.read { db in
+            let q = Self.buildSearchQuery(query, boardID: boardID)
+            return (try Self.fetchItems(db, q, limit: limit), try Self.countMatches(db, q))
         }
     }
 
@@ -157,32 +259,11 @@ final class Store {
         }
     }
 
-    /// 현재 쿼리/탭 조건의 전체 매칭 수 — 팔레트 카운터("50 / 197개")와 페이지네이션 판단용
+    /// 현재 쿼리/탭 조건의 전체 매칭 수 — 팔레트 카운터("50 / 197개")와 페이지네이션 판단용.
+    /// 팔레트 핫패스는 searchPage (fetch+count 단일 read) 를 쓴다 — 이 API 는 단발 조회용.
     func countItems(matching query: String, boardID: Int64?) throws -> Int {
         try dbQueue.read { db in
-            if query.isEmpty {
-                var request = ClipItem.all()
-                if let boardID {
-                    request = request.filter(Column("boardId") == boardID)
-                } else {
-                    request = request.filter(Column("deletedAt") == nil)
-                }
-                return try request.fetchCount(db)
-            }
-            let pattern = FTS5Pattern(matchingAllPrefixesIn: query)
-            var sql = """
-                SELECT COUNT(*) FROM items
-                JOIN items_fts ON items_fts.rowid = items.id
-                WHERE items_fts MATCH ?
-                """
-            var arguments: [DatabaseValueConvertible?] = [pattern]
-            if let boardID {
-                sql += " AND items.boardId = ?"
-                arguments.append(boardID)
-            } else {
-                sql += " AND items.deletedAt IS NULL"
-            }
-            return try Int.fetchOne(db, sql: sql, arguments: StatementArguments(arguments)) ?? 0
+            try Self.countMatches(db, Self.buildSearchQuery(query, boardID: boardID))
         }
     }
 
@@ -204,6 +285,23 @@ final class Store {
             )
             try board.insert(db)
             return board
+        }
+    }
+
+    /// 보드 순서 변경 — 현재 순서(displayOrder, id)에서 delta 만큼 이동.
+    /// 전체를 배열 인덱스로 재기록하므로 삭제로 생긴 구멍/중복도 함께 자가 치유된다.
+    func moveBoard(_ board: Board, by delta: Int) throws {
+        try dbQueue.write { db in
+            var boards = try Board.order(Column("displayOrder"), Column("id")).fetchAll(db)
+            guard let index = boards.firstIndex(where: { $0.id == board.id }) else { return }
+            let target = index + delta
+            guard boards.indices.contains(target), target != index else { return }
+            boards.swapAt(index, target)
+            for (order, b) in boards.enumerated() where b.displayOrder != order {
+                var updated = b
+                updated.displayOrder = order
+                try updated.update(db)
+            }
         }
     }
 

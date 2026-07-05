@@ -193,6 +193,7 @@ final class PaletteController {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let cmd = mods.contains(.command)
         let shift = mods.contains(.shift)
+        let opt = mods.contains(.option)
 
         // 라벨 입력 중: esc 만 가로채고 나머지는 TextField 로 (⏎ 은 onSubmit)
         if viewModel.renameVisible {
@@ -316,6 +317,27 @@ final class PaletteController {
             return true
         case 51 where cmd: // ⌘⌫: 항목 삭제 (전체 탭에선 보드 항목은 숨김만)
             viewModel.deleteSelection()
+            return true
+        // ⌘⇧←/→: 현재 보드 탭 이동 (1차 단축키, 힌트 바 노출)
+        // 키코드 123/124 는 이 switch 최초 사용 (기존 화살표는 125/126 상하뿐),
+        // 보드 '전환' ⌘[/⌘] 는 키코드 33/30 브래킷 키라 무관 — 충돌 없음.
+        // 전체 탭(selectedBoard == nil)에서는 return false 로 이벤트를 통과시켜
+        // 검색 TextField 의 macOS 표준 편집 단축키(⌘⇧←/→ = 줄 시작/끝까지 선택)를 보존한다.
+        case 123 where cmd && shift: // ⌘⇧←: 현재 보드 탭을 왼쪽으로
+            guard viewModel.selectedBoard != nil else { return false }
+            viewModel.moveSelectedBoard(by: -1)
+            return true
+        case 124 where cmd && shift: // ⌘⇧→: 오른쪽으로
+            guard viewModel.selectedBoard != nil else { return false }
+            viewModel.moveSelectedBoard(by: 1)
+            return true
+        // ⌘⌥[/] 는 반드시 아래의 ⌘[/] case 보다 앞에 — switch 는 첫 매칭만 실행하므로
+        // 뒤에 두면 'where cmd' 가 option 포함 이벤트도 삼켜 보드 순환으로 오동작한다
+        case 33 where cmd && opt: // ⌘⌥[: 현재 보드를 왼쪽으로 이동 (⌘⇧← 의 브래킷 별칭)
+            viewModel.moveSelectedBoard(by: -1)
+            return true
+        case 30 where cmd && opt: // ⌘⌥]: 현재 보드를 오른쪽으로 이동 (⌘⇧→ 의 브래킷 별칭)
+            viewModel.moveSelectedBoard(by: 1)
             return true
         case 33 where cmd: // ⌘[ (⇧ 있어도 됨): 이전 보드
             viewModel.cycleBoard(by: -1)

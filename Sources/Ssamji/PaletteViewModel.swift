@@ -26,7 +26,11 @@ final class PaletteViewModel: ObservableObject {
     }
 
     @Published var query = "" {
-        didSet { search() }
+        didSet {
+            // 타이핑 핫패스: 한글 IME 는 자모 조합마다 didSet 을 발화하므로 100ms 디바운스로
+            // 코얼레싱한다. 단, 빈 쿼리 경계(첫 글자 입력·전체 삭제)는 즉시 실행해 반응성 유지.
+            scheduleSearch(immediate: oldValue.isEmpty || query.isEmpty)
+        }
     }
     @Published var results: [ClipItem] = []
     @Published var selectedIndex = 0 {
@@ -258,7 +262,44 @@ final class PaletteViewModel: ObservableObject {
         results.count < totalMatching && pageLimit < pageLimitMax
     }
 
+    // 검색 디바운스 (타이핑 핫패스) — 명시 액션(reset/보드 전환 등)은 search() 가 즉시 실행하고,
+    // generation 토큰이 뒤늦게 도착하는 비동기 결과(추월·스테일)를 폐기한다.
+    private var searchDebounce: Task<Void, Never>?
+    private var searchGeneration = 0
+
+    private func scheduleSearch(immediate: Bool = false) {
+        searchDebounce?.cancel()
+        searchGeneration += 1
+        let generation = searchGeneration
+        searchDebounce = Task { [weak self] in
+            if !immediate {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            guard !Task.isCancelled, let self else { return }
+            await self.performSearch(generation: generation)
+        }
+    }
+
+    /// 디바운스 뒤 비동기 검색 — DB read 는 GRDB 큐에서, 결과 반영은 MainActor 에서.
+    /// 결과 갱신은 무애니메이션 즉시 교체 (성능 헌법 검색 특칙). 포커스는 건드리지 않는다 (IME 보호).
+    private func performSearch(generation: Int) async {
+        pageLimit = pageSize // 쿼리가 바뀌면 첫 페이지부터
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        let page = try? await store.searchPage(matching: trimmed, boardID: selectedBoardID, limit: pageLimit)
+        // 대기 중 새 검색이 시작됐으면 이 결과는 스테일 — 폐기 (순서 역전 방지)
+        guard generation == searchGeneration else { return }
+        results = page?.items ?? []
+        totalMatching = page?.total ?? results.count
+        selectedIndex = 0
+        secretRevealed = false
+        previewItem = selectedItem
+    }
+
+    /// 즉시(동기) 검색 — reset()·보드 전환 등 명시 액션 경로 전용.
+    /// 진행 중인 디바운스를 취소하고 generation 을 올려 뒤늦은 비동기 결과를 무효화한다.
     func search() {
+        searchDebounce?.cancel()
+        searchGeneration += 1
         pageLimit = pageSize // 쿼리/탭이 바뀌면 첫 페이지부터
         fetchResults()
         selectedIndex = 0
@@ -268,8 +309,10 @@ final class PaletteViewModel: ObservableObject {
 
     private func fetchResults() {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        results = (try? store.items(matching: trimmed, boardID: selectedBoardID, limit: pageLimit)) ?? []
-        totalMatching = (try? store.countItems(matching: trimmed, boardID: selectedBoardID)) ?? results.count
+        // 단일 read 블록에서 fetch + count — 락 1회, 동일 스냅샷 ("50 / 197개" 정합)
+        let page = try? store.searchPage(matching: trimmed, boardID: selectedBoardID, limit: pageLimit)
+        results = page?.items ?? []
+        totalMatching = page?.total ?? results.count
     }
 
     /// 바닥에서 ↓ — 다음 페이지를 이어 붙이고 선택을 한 칸 내린다
@@ -322,6 +365,22 @@ final class PaletteViewModel: ObservableObject {
         let current = ids.firstIndex(of: selectedBoardID) ?? 0
         let next = (current + delta + ids.count) % ids.count
         selectBoard(ids[next])
+    }
+
+    /// 보드 순서 변경 (탭 컨텍스트 메뉴) — 결과 목록은 불변, 탭 순서만 다시 읽는다
+    func moveBoard(_ board: Board, by delta: Int) {
+        do {
+            try store.moveBoard(board, by: delta)
+        } catch {
+            FeedbackHUD.shared.failure("보드 이동 실패 — \(error.localizedDescription)")
+        }
+        reloadBoards()
+    }
+
+    /// 현재 선택된 보드를 이동 (⌘⇧←/→, 별칭 ⌘⌥[/]) — 전체 탭에서는 아무것도 하지 않는다
+    func moveSelectedBoard(by delta: Int) {
+        guard let board = selectedBoard else { return }
+        moveBoard(board, by: delta)
     }
 
     func deleteBoard(_ board: Board) {

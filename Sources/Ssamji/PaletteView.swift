@@ -169,6 +169,10 @@ struct PaletteView: View {
     }
 
     // MARK: - 보드 탭
+    // 탭 재정렬은 무트랜지션 즉시 교체 (reloadBoards 를 withAnimation 으로 감싸지 말 것 — 헌법).
+    // 드래그(onDrag/onDrop) 재정렬은 이 릴리스에서 제외: 탭이 .plain Button + .contextMenu +
+    // TabPulse overlay 조합이라 macOS 에서 드래그 인식이 취약하고, 표준 DropDelegate 라이브 스왑은
+    // withAnimation 전제라 헌법과 충돌 — Button 재작성 + 무애니메이션 스왑 검증 후 별도 릴리스.
 
     private var boardTabs: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -183,6 +187,12 @@ struct PaletteView: View {
                     )
                     .contextMenu {
                         Button(board.isSecret ? "시크릿 해제" : "시크릿으로 전환") { vm.toggleBoardSecret(board) }
+                        Divider()
+                        Button("← 왼쪽으로 이동") { vm.moveBoard(board, by: -1) }
+                            .disabled(vm.boards.first?.id == board.id)
+                        Button("오른쪽으로 이동 →") { vm.moveBoard(board, by: 1) }
+                            .disabled(vm.boards.last?.id == board.id)
+                        Divider()
                         Button("보드 삭제", role: .destructive) { vm.deleteBoard(board) }
                     }
                 }
@@ -490,6 +500,7 @@ struct PaletteView: View {
             hint("⌘E", "앱 제외")
             hint("⌘⌫", "삭제")
             if vm.selectedBoard != nil {
+                hint("⌘⇧←→", "보드 이동")
                 hint("⌘⇧⌫", "보드 삭제")
             }
             Spacer()
