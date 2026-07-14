@@ -206,6 +206,9 @@ final class PaletteViewModel: ObservableObject {
     @Published var stackPickerVisible = false
     @Published var stackPickerIndex = 0
 
+    // 단축키 도움말 (⌘/)
+    @Published var helpVisible = false
+
     // 보드 삭제 확인 (⌘⇧⌫)
     @Published var confirmingBoardDelete = false
 
@@ -255,6 +258,7 @@ final class PaletteViewModel: ObservableObject {
         // 스택은 비우지 않는다 — 팔레트 재오픈 후에도 유지 (⌘⇧K·커밋으로만 비움)
         stackPickerVisible = false
         confirmingBoardDelete = false
+        helpVisible = false
         search()
     }
 

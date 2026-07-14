@@ -77,19 +77,51 @@ func renderIcon() -> NSImage {
     ctx.fillPath()
     ctx.restoreGState()
 
-    // 묶는 끈 (진한 청자색 밴드 + 매듭 + 늘어진 끈)
-    let deep = NSColor(calibratedRed: 0.07, green: 0.32, blue: 0.26, alpha: 1)
-    ctx.setFillColor(deep.cgColor)
-    let band = CGPath(roundedRect: CGRect(x: 396, y: 632, width: 232, height: 58),
-                      cornerWidth: 29, cornerHeight: 29, transform: nil)
+    // 묶는 끈 — 금사(金絲): "귀한 것은 금실로 여민다" (시크릿 보드 골드와 동일 서사)
+    let goldLight = NSColor(calibratedRed: 0.917, green: 0.784, blue: 0.404, alpha: 1) // #EAC867
+    let goldDeep = NSColor(calibratedRed: 0.604, green: 0.482, blue: 0.118, alpha: 1)  // #9A7B1E
+    let goldGradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: [goldLight.cgColor, goldDeep.cgColor] as CFArray,
+        locations: [0, 1]
+    )!
+
+    // 밴드: 금사 그라디언트 채움 + 몸통과 분리되는 미세 그림자
+    let bandRect = CGRect(x: 396, y: 632, width: 232, height: 58)
+    let band = CGPath(roundedRect: bandRect, cornerWidth: 29, cornerHeight: 29, transform: nil)
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: 0, height: -5), blur: 12,
+                  color: NSColor.black.withAlphaComponent(0.22).cgColor)
     ctx.addPath(band)
+    ctx.setFillColor(goldDeep.cgColor)
     ctx.fillPath()
+    ctx.restoreGState()
+    ctx.saveGState()
+    ctx.addPath(band)
+    ctx.clip()
+    ctx.drawLinearGradient(
+        goldGradient,
+        start: CGPoint(x: bandRect.midX, y: bandRect.maxY),
+        end: CGPoint(x: bandRect.midX, y: bandRect.minY),
+        options: []
+    )
+    ctx.restoreGState()
 
-    // 매듭
-    ctx.fillEllipse(in: CGRect(x: 484, y: 630, width: 56, height: 62))
+    // 매듭 (금사)
+    let knotRect = CGRect(x: 484, y: 630, width: 56, height: 62)
+    ctx.saveGState()
+    ctx.addEllipse(in: knotRect)
+    ctx.clip()
+    ctx.drawLinearGradient(
+        goldGradient,
+        start: CGPoint(x: knotRect.midX, y: knotRect.maxY),
+        end: CGPoint(x: knotRect.midX, y: knotRect.minY),
+        options: []
+    )
+    ctx.restoreGState()
 
-    // 늘어진 끈 두 가닥
-    ctx.setStrokeColor(deep.cgColor)
+    // 늘어진 끈 두 가닥 (금사 딥톤 — 흰 몸통 위 가독)
+    ctx.setStrokeColor(goldDeep.cgColor)
     ctx.setLineWidth(17)
     ctx.setLineCap(.round)
     ctx.move(to: CGPoint(x: 498, y: 636))

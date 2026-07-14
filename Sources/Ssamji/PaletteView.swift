@@ -102,12 +102,28 @@ struct PaletteView: View {
                 stackPickerOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
+            if vm.helpVisible {
+                helpOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
         }
+        .animation(.easeOut(duration: 0.14), value: vm.helpVisible)
         .animation(.easeOut(duration: 0.14), value: vm.pickerVisible)
         .animation(.easeOut(duration: 0.14), value: vm.renameVisible)
         .animation(.easeOut(duration: 0.14), value: vm.transformVisible)
         .animation(.easeOut(duration: 0.14), value: vm.confirmingBoardDelete)
         .animation(.easeOut(duration: 0.14), value: vm.stackPickerVisible)
+    }
+
+    // MARK: - 단축키 도움말 (⌘/)
+
+    private var helpOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .onTapGesture { vm.helpVisible = false }
+            HelpCard()
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - 스택 커밋 픽커 (⌘⏎)
@@ -495,17 +511,12 @@ struct PaletteView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { vm.clearStack() }
             }
-            hint("⌘T", "변환")
-            hint("⌘P", "보드")
-            hint("⌘R", "라벨")
-            hint("⌘E", "앱 제외")
             hint("⌘⌫", "삭제")
-            if let board = vm.selectedBoard {
-                hint("⌘⇧←→", "보드 이동")
-                hint("⌘⇧S", board.isSecret ? "시크릿 해제" : "시크릿 전환")
-                hint("⌘⇧⌫", "보드 삭제")
-            }
             Spacer()
+            // 나머지 단축키는 전부 ⌘/ 도움말로 — 상시 8개 힌트의 인지 부하 대신 발견 가능한 사전
+            hint("⌘/", "단축키")
+                .contentShape(Rectangle())
+                .onTapGesture { vm.helpVisible = true }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
@@ -738,6 +749,71 @@ private struct TextPreviewBody: View, Equatable {
             }
         case .none:
             EmptyView()
+        }
+    }
+}
+
+/// ⌘/ 단축키 도움말 카드 — 정적 콘텐츠, 아무 키나 누르면 닫힌다
+private struct HelpCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SsamjiCardTitle(text: "단축키", tint: SsamjiColor.accent)
+            HStack(alignment: .top, spacing: 26) {
+                VStack(alignment: .leading, spacing: 14) {
+                    group("실행", [
+                        ("⏎", "붙여넣기"),
+                        ("⇧⏎", "복사만"),
+                        ("⌘1–9", "바로 붙여넣기"),
+                        ("⌥ 홀드", "시크릿 내용 보기"),
+                    ])
+                    group("스택", [
+                        ("⌘K", "담기 · 빼기"),
+                        ("⌘⏎", "스택 붙여넣기"),
+                        ("⌘⇧K", "스택 비우기"),
+                    ])
+                }
+                VStack(alignment: .leading, spacing: 14) {
+                    group("정리", [
+                        ("⌘T", "변환해서 붙여넣기"),
+                        ("⌘R", "라벨 지정"),
+                        ("⌘P", "보드에 넣기"),
+                        ("⌘E", "이 앱 수집 제외"),
+                        ("⌘⌫", "삭제"),
+                    ])
+                    group("보드", [
+                        ("⌘[ ]", "보드 전환"),
+                        ("⌘⇧←→", "보드 순서 이동"),
+                        ("⌘⇧S", "시크릿 전환"),
+                        ("⌘⇧⌫", "보드 삭제"),
+                    ])
+                }
+            }
+            Text("⌘⇧E 은신 모드 · 아무 키나 누르면 닫힙니다")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .ssamjiCard(width: 470, tint: SsamjiColor.accent)
+    }
+
+    private func group(_ title: String, _ items: [(String, String)]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(SsamjiColor.accent)
+            ForEach(items, id: \.0) { key, label in
+                HStack(spacing: 8) {
+                    Text(key)
+                        .font(.caption2.monospaced())
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                        .frame(minWidth: 52, alignment: .leading)
+                    Text(label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }

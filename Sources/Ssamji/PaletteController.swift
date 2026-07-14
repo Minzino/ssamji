@@ -264,6 +264,13 @@ final class PaletteController {
             }
         }
 
+        // 단축키 도움말 (⌘/) — 아무 키나 닫는다 (읽고 바로 이어서 작업)
+        if viewModel.helpVisible {
+            viewModel.helpVisible = false
+            // esc/⌘/ 는 소비, 그 외는 통과시켜 곧바로 원래 동작 수행
+            return event.keyCode == 53 || (cmd && event.keyCode == 44)
+        }
+
         // 변환 픽커(⌘T)
         if viewModel.transformVisible {
             switch event.keyCode {
@@ -287,6 +294,9 @@ final class PaletteController {
         switch event.keyCode {
         case 53: // esc
             hide()
+            return true
+        case 44 where cmd: // ⌘/: 단축키 도움말
+            viewModel.helpVisible = true
             return true
         case 125, 126: // down / up
             // 주의: 여기서 NSApp.nextEvent 로 큐를 코얼레싱하면 안 된다 — nextEvent 는
