@@ -312,6 +312,10 @@ final class PaletteController {
         case 14 where cmd: // ⌘E: 이 항목의 출처 앱을 수집 제외
             viewModel.excludeSelectedItemApp()
             return true
+        case 1 where cmd && shift: // ⌘⇧S: 현재 보드 시크릿 전환 (보드 탭에서만 — 우클릭 메뉴와 동일 동작)
+            guard let board = viewModel.selectedBoard else { return false }
+            viewModel.toggleBoardSecret(board)
+            return true
         case 51 where cmd && shift: // ⌘⇧⌫: 현재 보드 삭제 (확인 후)
             viewModel.requestDeleteCurrentBoard()
             return true

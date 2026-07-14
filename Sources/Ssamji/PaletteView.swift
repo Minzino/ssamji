@@ -499,8 +499,9 @@ struct PaletteView: View {
             hint("⌘R", "라벨")
             hint("⌘E", "앱 제외")
             hint("⌘⌫", "삭제")
-            if vm.selectedBoard != nil {
+            if let board = vm.selectedBoard {
                 hint("⌘⇧←→", "보드 이동")
+                hint("⌘⇧S", board.isSecret ? "시크릿 해제" : "시크릿 전환")
                 hint("⌘⇧⌫", "보드 삭제")
             }
             Spacer()
