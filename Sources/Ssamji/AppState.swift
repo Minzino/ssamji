@@ -146,6 +146,8 @@ final class AppState: ObservableObject {
             controller.viewModel.directPasteEnabled = directPasteEnabled
             controller.viewModel.excludedApps = excludedApps
             palette = controller
+            // 첫 개방 즉시 타이핑 반응을 위해 패널 사전 생성
+            controller.prewarm()
         }
 
         KeyboardShortcuts.onKeyUp(for: .togglePalette) { [weak self] in

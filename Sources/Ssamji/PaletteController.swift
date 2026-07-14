@@ -23,6 +23,12 @@ final class PaletteController {
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
+    /// 앱 시작 시 패널을 미리 생성 — 첫 개방 시 뷰 생성·onAppear 포커스 확립이
+    /// 이미 끝나 있어 "열자마자 타이핑" 반응이 재개방과 같아진다.
+    func prewarm() {
+        _ = ensurePanel()
+    }
+
     func toggle() {
         isVisible ? hide() : show()
     }
