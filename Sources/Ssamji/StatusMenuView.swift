@@ -173,6 +173,9 @@ struct StatusMenuView: View {
         }
         .padding(14)
         .frame(width: 320)
+        // 창 높이를 콘텐츠에 강제 고정 — MenuBarExtra 창이 이전(더 길던) 레이아웃의
+        // 높이를 기억해 상단에 큰 공백이 남는 것 방지
+        .fixedSize(horizontal: false, vertical: true)
         // 설정창 전체 일괄 청자화 — 토글·버튼·슬라이더가 한 물감이 된다
         .tint(SsamjiColor.accent)
         .onAppear {

@@ -21,7 +21,7 @@ enum MenuBarIcon {
 
             let path = CGMutablePath()
             // 몸통 (여며도 몸통은 그대로 — 보관물은 안전하다)
-            path.addEllipse(in: CGRect(x: 224, y: 140, width: 576, height: 530))
+            path.addEllipse(in: CGRect(x: 240, y: 128, width: 544, height: 512))
             // 목 연결부
             path.move(to: CGPoint(x: sx(424), y: 590))
             path.addLine(to: CGPoint(x: sx(600), y: 590))
@@ -44,10 +44,11 @@ enum MenuBarIcon {
 
             // 끈 밴드는 펀치아웃으로 표현 (템플릿은 단색이라 구멍이 곧 디테일)
             ctx.setBlendMode(.destinationOut)
-            let bandWidth = 264 * squeeze
-            let corner = min(43, bandWidth / 2)
+            // 18px 에서도 끈이 읽히도록 펀치아웃을 크게 — 구멍이 곧 실루엣의 디테일
+            let bandWidth = 296 * squeeze
+            let corner = min(52, bandWidth / 2)
             let band = CGPath(
-                roundedRect: CGRect(x: 512 - bandWidth / 2, y: 600, width: bandWidth, height: 86),
+                roundedRect: CGRect(x: 512 - bandWidth / 2, y: 586, width: bandWidth, height: 108),
                 cornerWidth: corner, cornerHeight: corner, transform: nil
             )
             ctx.addPath(band)
