@@ -14,10 +14,10 @@ enum Permissions {
 
         var label: String {
             switch self {
-            case .granted: return "항상 허용"
-            case .denied: return "거부됨"
-            case .ask: return "매번 확인"
-            case .systemDefault: return "기본값 (미설정)"
+            case .granted: return L("항상 허용")
+            case .denied: return L("거부됨")
+            case .ask: return L("매번 확인")
+            case .systemDefault: return L("기본값 (미설정)")
             }
         }
 

@@ -62,7 +62,7 @@ enum PasteboardReader {
             item.kind = .image
             item.checksum = checksum
             item.imagePath = path.path
-            item.title = "이미지 \(Int(size.width))×\(Int(size.height))"
+            item.title = L("이미지 %d×%d", Int(size.width), Int(size.height))
             item.byteSize = data.count
             return item
         }
@@ -74,7 +74,7 @@ enum PasteboardReader {
             item.checksum = sha256(Data(string.utf8))
             item.byteSize = string.utf8.count
             item.title = String(trimmed.split(separator: "\n").first ?? "").prefix(80).description
-            if item.title.isEmpty { item.title = "(공백)" }
+            if item.title.isEmpty { item.title = L("(공백)") }
 
             if let url = URL(string: trimmed),
                let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),

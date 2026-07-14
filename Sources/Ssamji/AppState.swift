@@ -36,7 +36,7 @@ final class AppState: ObservableObject {
         didSet {
             guard oldValue != stealthMode else { return }
             watcher.isPaused = stealthMode
-            FeedbackHUD.shared.success(stealthMode ? "쌈지를 여몄어요 — 수집 일시정지" : "쌈지를 열었어요 — 수집 재개")
+            FeedbackHUD.shared.success(stealthMode ? L("쌈지를 여몄어요 — 수집 일시정지") : L("쌈지를 열었어요 — 수집 재개"))
         }
     }
 
@@ -62,10 +62,10 @@ final class AppState: ObservableObject {
         let name = Self.appDisplayName(for: bundleID)
         if excludedApps.contains(bundleID) {
             removeExcludedApp(bundleID)
-            FeedbackHUD.shared.success("\(name) 수집 제외 해제")
+            FeedbackHUD.shared.success(L("%@ 수집 제외 해제", name))
         } else {
             excludeApp(bundleID: bundleID)
-            FeedbackHUD.shared.success("\(name) 수집 제외")
+            FeedbackHUD.shared.success(L("%@ 수집 제외", name))
         }
     }
 
@@ -111,7 +111,7 @@ final class AppState: ObservableObject {
         do {
             store = try Store()
         } catch {
-            lastError = "저장소 초기화 실패: \(error.localizedDescription)"
+            lastError = L("저장소 초기화 실패: %@", error.localizedDescription)
             return
         }
 
@@ -130,7 +130,7 @@ final class AppState: ObservableObject {
                 self?.commitText(text, action: action)
             }
             controller.viewModel.onCommitStack = { [weak self] text, count, action in
-                self?.commitText(text, action: action, what: "스택 \(count)개")
+                self?.commitText(text, action: action, what: L("스택 %d개", count))
             }
             controller.viewModel.onCommitStackSequential = { [weak self] texts in
                 self?.startSequentialPaste(texts)
@@ -170,15 +170,15 @@ final class AppState: ObservableObject {
     var pasteImportAvailable: Bool { PasteImporter.isAvailable }
 
     func runPasteImport() {
-        guard let store, importStatus != "가져오는 중…" else { return }
-        importStatus = "가져오는 중…"
+        guard let store, importStatus != L("가져오는 중…") else { return }
+        importStatus = L("가져오는 중…")
         Task.detached { [weak self] in
             let outcome: String
             do {
                 let result = try PasteImporter.run(into: store)
                 outcome = result.summary
             } catch {
-                outcome = "실패: \(error.localizedDescription)"
+                outcome = L("실패: %@", error.localizedDescription)
             }
             await MainActor.run { [weak self] in
                 guard let self else { return }
@@ -207,7 +207,7 @@ final class AppState: ObservableObject {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                lastError = "로그인 시작 설정 실패: \(error.localizedDescription)"
+                lastError = L("로그인 시작 설정 실패: %@", error.localizedDescription)
             }
             objectWillChange.send()
         }
@@ -224,7 +224,7 @@ final class AppState: ObservableObject {
         // 순차 모드 중 새 복사가 들어오면 클립보드 주도권이 사용자에게 돌아간 것 — 모드 해제 통지
         if sequentialActive {
             cancelSequential()
-            FeedbackHUD.shared.success("순차 모드 종료 — 새 복사 감지")
+            FeedbackHUD.shared.success(L("순차 모드 종료 — 새 복사 감지"))
         }
         guard let item = PasteboardReader.capture(from: pasteboard, blobsDirectory: store.blobsDirectory) else { return }
         if let bundleID = item.sourceAppBundleID, excludedApps.contains(bundleID) { return }
@@ -233,9 +233,9 @@ final class AppState: ObservableObject {
             refresh()
             cleanupIfDue()
         } catch {
-            lastError = "저장 실패: \(error.localizedDescription)"
+            lastError = L("저장 실패: %@", error.localizedDescription)
             // 수집 실패는 침묵하면 안 된다 — 시크릿을 저장했다고 믿게 만들 수 있음
-            FeedbackHUD.shared.failure("수집 저장 실패 — \(error.localizedDescription)")
+            FeedbackHUD.shared.failure(L("수집 저장 실패 — %@", error.localizedDescription))
         }
     }
 
@@ -262,14 +262,14 @@ final class AppState: ObservableObject {
         palette?.hide(animated: false)
         guard !texts.isEmpty else { return }
         guard Permissions.accessibilityGranted() else {
-            FeedbackHUD.shared.failure("순차 모드에는 손쉬운 사용 권한이 필요해요")
+            FeedbackHUD.shared.failure(L("순차 모드에는 손쉬운 사용 권한이 필요해요"))
             return
         }
         cancelSequential()
         sequentialQueue = texts
         sequentialIndex = 0
         loadSequentialItem()
-        FeedbackHUD.shared.success("순차 모드 — 스택 1/\(texts.count) 준비 (⌘V 로 하나씩)")
+        FeedbackHUD.shared.success(L("순차 모드 — 스택 1/%d 준비 (⌘V 로 하나씩)", texts.count))
         sequentialMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // ⌘V 만 (⌘⇧V 팔레트 핫키 등 다른 수정자 조합은 제외)
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -296,9 +296,9 @@ final class AppState: ObservableObject {
         let consumed = sequentialIndex + 1
         let total = sequentialQueue.count
         if consumed >= total {
-            FeedbackHUD.shared.success("스택 \(consumed)/\(total) 붙여넣음 — 순차 모드 완료")
+            FeedbackHUD.shared.success(L("스택 %d/%d 붙여넣음 — 순차 모드 완료", consumed, total))
         } else {
-            FeedbackHUD.shared.success("스택 \(consumed)/\(total) 붙여넣음")
+            FeedbackHUD.shared.success(L("스택 %d/%d 붙여넣음", consumed, total))
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self, self.sequentialActive else { return }
@@ -335,17 +335,17 @@ final class AppState: ObservableObject {
         let snapshot = (wantsPaste && restoreClipboardEnabled) ? snapshotPasteboard() : nil
         guard writeToPasteboard(item) else {
             // 불소비 원칙: 준비 실패 시 기존 클립보드는 그대로 — 침묵하지 않고 알린다
-            FeedbackHUD.shared.failure("클립보드 준비 실패 — 원본을 읽을 수 없어요")
+            FeedbackHUD.shared.failure(L("클립보드 준비 실패 — 원본을 읽을 수 없어요"))
             return
         }
         if wantsPaste {
             // 팔레트가 nonactivating 패널이라 이전 앱이 여전히 활성 상태 — 바로 ⌘V 합성
             let targetApp = NSWorkspace.shared.frontmostApplication?.localizedName
             PasteEngine.pasteToFrontmostApp()
-            FeedbackHUD.shared.success(targetApp.map { "붙여넣음 → \($0)" } ?? "붙여넣음")
+            FeedbackHUD.shared.success(targetApp.map { L("붙여넣음 → %@", $0) } ?? L("붙여넣음"))
             scheduleClipboardRestore(snapshot)
         } else {
-            FeedbackHUD.shared.success("복사됨")
+            FeedbackHUD.shared.success(L("복사됨"))
         }
         if let store {
             var bumped = item
@@ -353,8 +353,8 @@ final class AppState: ObservableObject {
             do {
                 try store.save(bumped)
             } catch {
-                lastError = "저장 실패: \(error.localizedDescription)"
-                FeedbackHUD.shared.failure("기록 저장 실패 — \(error.localizedDescription)")
+                lastError = L("저장 실패: %@", error.localizedDescription)
+                FeedbackHUD.shared.failure(L("기록 저장 실패 — %@", error.localizedDescription))
             }
         }
         refresh()
@@ -376,13 +376,13 @@ final class AppState: ObservableObject {
             let targetApp = NSWorkspace.shared.frontmostApplication?.localizedName
             PasteEngine.pasteToFrontmostApp()
             if let what {
-                FeedbackHUD.shared.success("\(what) 붙여넣음")
+                FeedbackHUD.shared.success(L("%@ 붙여넣음", what))
             } else {
-                FeedbackHUD.shared.success(targetApp.map { "붙여넣음 → \($0)" } ?? "붙여넣음")
+                FeedbackHUD.shared.success(targetApp.map { L("붙여넣음 → %@", $0) } ?? L("붙여넣음"))
             }
             scheduleClipboardRestore(snapshot)
         } else {
-            FeedbackHUD.shared.success(what.map { "\($0) 복사됨" } ?? "복사됨")
+            FeedbackHUD.shared.success(what.map { L("%@ 복사됨", $0) } ?? L("복사됨"))
         }
     }
 

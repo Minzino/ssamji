@@ -18,7 +18,7 @@ enum PasteImporter {
         var boardsCreated = 0
 
         var summary: String {
-            "가져옴 \(imported) · 병합 \(merged) · 실패 \(failed) · 보드 \(boardsCreated)개 생성"
+            L("가져옴 %d · 병합 %d · 실패 %d · 보드 %d개 생성", imported, merged, failed, boardsCreated)
         }
     }
 
@@ -65,7 +65,7 @@ enum PasteImporter {
         }
         for list in lists {
             let pk: Int64 = list["Z_PK"]
-            let name: String = list["ZNAME"] ?? "가져온 보드"
+            let name: String = list["ZNAME"] ?? L("가져온 보드")
             if let existing = boardsByName[name] {
                 boardIDByListPK[pk] = existing
             } else {
@@ -245,7 +245,7 @@ enum PasteImporter {
             item.kind = .image
             item.checksum = checksum
             item.imagePath = path.path
-            item.title = "이미지 \(Int(size.width))×\(Int(size.height))"
+            item.title = L("이미지 %d×%d", Int(size.width), Int(size.height))
             item.byteSize = imageData.count
             return item
         }
@@ -267,7 +267,7 @@ enum PasteImporter {
         item.checksum = PasteboardReader.sha256(Data(string.utf8))
         item.byteSize = string.utf8.count
         item.title = String(String(trimmed.split(separator: "\n").first ?? "").prefix(80))
-        if item.title.isEmpty { item.title = "(공백)" }
+        if item.title.isEmpty { item.title = L("(공백)") }
 
         if let url = URL(string: trimmed),
            let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),

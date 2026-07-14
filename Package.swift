@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Ssamji",
+    defaultLocalization: "ko",
     platforms: [.macOS("15.4")],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0"),
@@ -16,6 +17,7 @@ let package = Package(
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts")
             ],
             path: "Sources/Ssamji",
+            resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

@@ -4,3 +4,9 @@ build/
 .omc/
 *.xcodeproj
 .swiftpm/
+
+# 클립보드 내용이 담기는 로컬 DB — 실수 커밋 방지
+*.db
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

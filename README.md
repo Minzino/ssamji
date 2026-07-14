@@ -1,23 +1,74 @@
-# 쌈지 (Ssamji)
+<p align="center">
+  <img src="Assets/icon_1024.png" width="128" alt="Ssamji icon">
+</p>
 
-macOS 26+ 네이티브 클립보드 매니저. Paste 2의 핵심 경험을 계승하되, Tahoe의 클립보드 프라이버시 정책에 정공법으로 대응한다.
+<h1 align="center">Ssamji (쌈지)</h1>
 
-- 기획서: `~/dev/test/clipboard-app-plan.md` (v1.1)
-- 스택: Swift 6 / SwiftUI + NSPanel / GRDB + FTS5 / CGEvent
+<p align="center">
+  A fast, keyboard-first clipboard manager for macOS — born the day macOS 26 broke my favorite one.
+  <br>
+  <a href="README.ko.md"><b>한국어 README</b></a>
+</p>
 
-## 빌드 & 실행
+---
 
-```sh
-./scripts/bundle.sh   # swift build + .app 번들 생성 + ad-hoc 서명
-open build/쌈지.app
+**Ssamji** (쌈지 — a traditional Korean pouch for carrying precious little things) keeps everything you copy, makes it searchable in milliseconds, and pastes it back with a single keystroke. Everything stays on your Mac: no account, no network, no telemetry.
+
+## Why
+
+macOS 26 (Tahoe) introduced clipboard privacy restrictions that broke long-unmaintained clipboard managers. Instead of waiting for a fix that might never come, Ssamji was built from scratch for the new rules — it asks for the right permissions and works *with* the system, not around it.
+
+## Features
+
+- **Central palette** (`⌘⇧V` by default, configurable) — search field, result list, and rich preview in one non-activating panel. Your current app keeps focus.
+- **Direct paste** — `Enter` pastes straight into the frontmost app (via Accessibility). `Shift Enter` copies only. `⌘1–9` pastes instantly.
+- **Boards** — organize clips into pinned collections. Boards are independent spaces: deleting from history never touches board items. Create (`⌘N`), assign (`⌘P`), switch (`⌘[` / `⌘]`), reorder (`⌘⇧←→`).
+- **Secret boards** — masked previews, labels instead of content, hold `⌥` to peek. (At-rest encryption with Touch ID is on the roadmap.)
+- **Paste stack** — collect several clips (`⌘K`), then paste them all at once (`⌘⏎`) joined by newline, space, comma, `&&`, or sequentially.
+- **Transform paste** (`⌘T`) — upper/lower case, trim, kebab/snake case, JSON pretty-print, and terminal-friendly variants.
+- **Real full-text search** — SQLite FTS5 with a trigram tokenizer: substring matching that works for Korean (and everything else), debounced so typing never lags.
+- **Migrate from Paste** — one-click import of your entire Paste library (boards, labels, and images included).
+- **Stealth mode** (`⌘⇧E`) — pause collection instantly; the menu bar icon dims while paused.
+- **App exclusions** (`⌘E`) — never collect from password managers or any app you choose.
+- **Retention policy** — keep history 1–90 days or forever; board items are always preserved.
+- **Localized** — English and Korean, follows your system language.
+
+Press `⌘/` inside the palette for the full shortcut reference.
+
+## Install
+
+Requires **macOS 15.4+**. Build from source (Xcode command line tools with the Swift 6 toolchain):
+
+```bash
+git clone https://github.com/Minzino/ssamji.git
+cd ssamji
+./scripts/bundle.sh   # builds, signs, installs to /Applications, and relaunches
 ```
 
-## 마일스톤
+On first run, grant two permissions:
 
-- [x] M0 스켈레톤 — 메뉴바 앱, 권한 온보딩(클립보드·손쉬운 사용)
-- [x] M1 수집 엔진 — pasteboard watcher, 타입 감지, dedup, DB 저장
-- [x] M2 패널 UI — 중앙 팔레트(검색+리스트+프리뷰), 키보드 네비
-- [x] M3 붙여넣기 — 다이렉트 페이스트, plain 변환, ⌘1–9
-- [x] M4 핀보드 — 보드 관리 + 시크릿 보드(마스킹, ⌥ 피킹, 라벨) + 다이렉트 페이스트 토글
-- [x] M5 깔롱+파워 — 변환 팔레트, 페이스트 스택, 앱 제외, 코드 하이라이트, 애니메이션, 복주머니 아이콘
-- [x] M6 이주·마감 — Paste.db 임포트(항목·보드·라벨·외부블롭), 로그인 시 시작
+1. **Clipboard access** — System Settings → Privacy & Security → set Ssamji to *Always Allow* (macOS 26).
+2. **Accessibility** — required for direct paste (`⌘V` synthesis). Without it, `Enter` copies to the clipboard instead.
+
+> The bundled script signs with a local self-signed certificate. Prebuilt, notarized releases are planned.
+
+## Privacy
+
+- Everything is stored locally in `~/Library/Application Support/Ssamji/`.
+- No network access, no analytics, no account.
+- Content marked concealed by the system (`org.nspasteboard.ConcealedType`, e.g. password managers) is never collected.
+
+## Performance
+
+Ssamji is built around a strict "no jank" contract: precomputed previews, memoized rows, CJK font-fallback pre-resolution, and key-repeat-aware preview deferral. Scrolling hundreds of items or switching boards stays within a single frame budget on Apple silicon.
+
+## Roadmap
+
+- Secret board vault — AES-GCM encryption at rest + Touch ID to reveal
+- iCloud sync (CloudKit)
+- Notarized binary releases / Homebrew cask
+- Frecency-based ranking
+
+## License
+
+[MIT](LICENSE)

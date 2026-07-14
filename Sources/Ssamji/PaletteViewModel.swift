@@ -19,8 +19,8 @@ final class PaletteViewModel: ObservableObject {
         var label: String {
             switch self {
             case .board(let b): return b.name
-            case .removeFromBoard: return "보드에서 제거"
-            case .createNew: return "새 보드 만들기…"
+            case .removeFromBoard: return L("보드에서 제거")
+            case .createNew: return L("새 보드 만들기…")
             }
         }
     }
@@ -185,11 +185,11 @@ final class PaletteViewModel: ObservableObject {
 
         var label: String {
             switch self {
-            case .newline: return "개행으로 (한 줄씩)"
-            case .space: return "공백으로"
-            case .comma: return "콤마로 (a, b, c)"
-            case .shellAnd: return "&& 원라이너로"
-            case .sequential: return "하나씩 순차 붙여넣기 (⌘V 마다 다음)"
+            case .newline: return L("개행으로 (한 줄씩)")
+            case .space: return L("공백으로")
+            case .comma: return L("콤마로 (a, b, c)")
+            case .shellAnd: return L("&& 원라이너로")
+            case .sequential: return L("하나씩 순차 붙여넣기 (⌘V 마다 다음)")
             }
         }
 
@@ -404,7 +404,7 @@ final class PaletteViewModel: ObservableObject {
         do {
             try store.moveBoard(board, by: delta)
         } catch {
-            FeedbackHUD.shared.failure("보드 이동 실패 — \(error.localizedDescription)")
+            FeedbackHUD.shared.failure(L("보드 이동 실패 — %@", error.localizedDescription))
         }
         reloadBoards()
     }
@@ -419,7 +419,7 @@ final class PaletteViewModel: ObservableObject {
         do {
             try store.deleteBoard(board)
         } catch {
-            FeedbackHUD.shared.failure("보드 삭제 실패 — \(error.localizedDescription)")
+            FeedbackHUD.shared.failure(L("보드 삭제 실패 — %@", error.localizedDescription))
         }
         if selectedBoardID == board.id { selectedBoardID = nil }
         reloadBoards()
@@ -430,7 +430,7 @@ final class PaletteViewModel: ObservableObject {
         do {
             try store.setBoardSecret(board, isSecret: !board.isSecret)
         } catch {
-            FeedbackHUD.shared.failure("시크릿 설정 실패 — \(error.localizedDescription)")
+            FeedbackHUD.shared.failure(L("시크릿 설정 실패 — %@", error.localizedDescription))
         }
         reloadBoards()
         reload(selecting: selectedItem?.uuid)
@@ -494,7 +494,7 @@ final class PaletteViewModel: ObservableObject {
     func clearStack() {
         guard !stack.isEmpty else { return }
         stack = []
-        FeedbackHUD.shared.success("스택 비움")
+        FeedbackHUD.shared.success(L("스택 비움"))
     }
 
     // MARK: 스택 커밋 픽커 (⌘⏎ → 구분자/순차 선택 → ⏎)
@@ -682,7 +682,7 @@ final class PaletteViewModel: ObservableObject {
         do {
             board = try store.createBoard(name: name, isSecret: newBoardSecret)
         } catch {
-            FeedbackHUD.shared.failure("보드 생성 실패 — \(error.localizedDescription)")
+            FeedbackHUD.shared.failure(L("보드 생성 실패 — %@", error.localizedDescription))
             closePicker()
             return
         }
@@ -700,7 +700,7 @@ final class PaletteViewModel: ObservableObject {
             try store.setBoard(boardID, for: item)
         } catch {
             succeeded = false
-            FeedbackHUD.shared.failure("보드 배정 실패 — \(error.localizedDescription)")
+            FeedbackHUD.shared.failure(L("보드 배정 실패 — %@", error.localizedDescription))
         }
         closePicker()
         reloadBoards()
@@ -744,7 +744,7 @@ final class PaletteViewModel: ObservableObject {
                 try store.delete(item)
             }
         } catch {
-            FeedbackHUD.shared.failure("삭제 실패 — \(error.localizedDescription)")
+            FeedbackHUD.shared.failure(L("삭제 실패 — %@", error.localizedDescription))
         }
         let previousIndex = selectedIndex
         reload()
@@ -832,7 +832,7 @@ final class PaletteViewModel: ObservableObject {
         do {
             try store.setCustomTitle(trimmed.isEmpty ? nil : trimmed, for: item)
         } catch {
-            FeedbackHUD.shared.failure("라벨 저장 실패 — \(error.localizedDescription)")
+            FeedbackHUD.shared.failure(L("라벨 저장 실패 — %@", error.localizedDescription))
         }
         renameVisible = false
         reload(selecting: item.uuid)

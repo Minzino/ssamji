@@ -17,7 +17,7 @@ struct StatusMenuView: View {
     /// 드래그 중엔 드래프트 값, 평소엔 확정 값 표시
     private var retentionLabel: String {
         let days = Int(draftRetention)
-        return days > 90 ? "무제한" : "\(days)일"
+        return days > 90 ? L("무제한") : L("%d일", days)
     }
 
     /// 수집 상태 dot — 시맨틱 규칙: 수집 중 success / 멈춤(은신 포함) danger
@@ -27,11 +27,18 @@ struct StatusMenuView: View {
     }
 
     private var collectionStatusLabel: String {
-        if state.stealthMode { return "은신 중" }
-        return state.watcherRunning ? "수집 중" : "수집 꺼짐"
+        if state.stealthMode { return L("은신 중") }
+        return state.watcherRunning ? L("수집 중") : L("수집 꺼짐")
     }
 
     private var permissionsOK: Bool { pasteboard.isUsable && accessibility }
+
+    /// 버전은 Info.plist(CFBundleShortVersionString)가 유일한 출처 — 하드코딩으로
+    /// 화면 표기가 배포 버전과 어긋나던 것 방지. 릴리스명은 릴리스마다 여기서 교체.
+    private var versionLabel: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+        return "v\(version) · " + L("쌈지, 문을 열다")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -40,9 +47,9 @@ struct StatusMenuView: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 22, height: 22)
-                Text("쌈지").font(.headline)
+                Text(L("쌈지")).font(.headline)
                 Spacer()
-                Text("v1.2.0 · 그물과 매듭").font(.caption2).foregroundStyle(.tertiary)
+                Text(versionLabel).font(.caption2).foregroundStyle(.tertiary)
             }
 
             // 상태 한 줄 — 권한이 정상이면 여기에 흡수 (아래로 펼치지 않는다)
@@ -53,12 +60,12 @@ struct StatusMenuView: View {
                 Text(collectionStatusLabel)
                     .font(.caption)
                 if permissionsOK {
-                    Text("· 권한 정상")
+                    Text(L("· 권한 정상"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("\(state.totalCount)개 보관")
+                Text(L("%d개 보관", state.totalCount))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -70,56 +77,56 @@ struct StatusMenuView: View {
             // 권한 문제 시에만 나타나는 안내 카드 (progressive disclosure)
             if !pasteboard.isUsable {
                 permissionCard(
-                    title: "클립보드 접근 권한이 필요해요",
+                    title: L("클립보드 접근 권한이 필요해요"),
                     detail: pasteboard.label,
-                    help: "시스템 설정 > 개인정보 보호 및 보안에서 쌈지를 '항상 허용'으로 설정하세요.",
+                    help: L("시스템 설정 > 개인정보 보호 및 보안에서 쌈지를 '항상 허용'으로 설정하세요."),
                     action: Permissions.openPrivacySettings,
-                    actionLabel: "설정 열기"
+                    actionLabel: L("설정 열기")
                 )
             }
             if !accessibility {
                 permissionCard(
-                    title: "손쉬운 사용 권한이 필요해요",
-                    detail: "다이렉트 붙여넣기(⌘V 시뮬레이션)에 쓰입니다",
-                    help: "허용 전까지 Enter 는 클립보드 복사만 합니다.",
+                    title: L("손쉬운 사용 권한이 필요해요"),
+                    detail: L("다이렉트 붙여넣기(⌘V 시뮬레이션)에 쓰입니다"),
+                    help: L("허용 전까지 Enter 는 클립보드 복사만 합니다."),
                     action: {
                         Permissions.requestAccessibility()
                         Permissions.openAccessibilitySettings()
                     },
-                    actionLabel: "권한 요청"
+                    actionLabel: L("권한 요청")
                 )
             }
 
             ThreadDivider()
 
             // 붙여넣기
-            sectionLabel("붙여넣기")
+            sectionLabel(L("붙여넣기"))
             groupCard {
                 toggleRow(
                     isOn: $state.directPasteEnabled,
-                    title: "Enter 로 바로 붙여넣기",
-                    caption: "끄면 클립보드에 복사만 합니다"
+                    title: L("Enter 로 바로 붙여넣기"),
+                    caption: L("끄면 클립보드에 복사만 합니다")
                 )
                 groupSeparator
                 toggleRow(
                     isOn: $state.restoreClipboardEnabled,
-                    title: "붙여넣은 뒤 원래 클립보드 복원",
-                    caption: "1초 후 이전 내용으로 되돌립니다"
+                    title: L("붙여넣은 뒤 원래 클립보드 복원"),
+                    caption: L("1초 후 이전 내용으로 되돌립니다")
                 )
             }
 
             // 수집
-            sectionLabel("수집")
+            sectionLabel(L("수집"))
             groupCard {
                 toggleRow(
                     isOn: $state.stealthMode,
-                    title: "은신 모드",
-                    caption: "수집만 잠시 멈춥니다 · 팔레트에서 Cmd Shift E"
+                    title: L("은신 모드"),
+                    caption: L("수집만 잠시 멈춥니다 · 팔레트에서 Cmd Shift E")
                 )
                 groupSeparator
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("히스토리 보관")
+                        Text(L("히스토리 보관"))
                             .font(.caption)
                         Spacer()
                         Text(retentionLabel)
@@ -133,7 +140,7 @@ struct StatusMenuView: View {
                         }
                     }
                     .controlSize(.small)
-                    Text("보드에 넣은 항목은 기간과 무관하게 보존됩니다.")
+                    Text(L("보드에 넣은 항목은 기간과 무관하게 보존됩니다."))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -142,10 +149,10 @@ struct StatusMenuView: View {
             }
 
             // 시스템
-            sectionLabel("시스템")
+            sectionLabel(L("시스템"))
             groupCard {
                 HStack {
-                    Text("팔레트 단축키")
+                    Text(L("팔레트 단축키"))
                         .font(.caption)
                     Spacer()
                     KeyboardShortcuts.Recorder(for: .togglePalette)
@@ -157,7 +164,7 @@ struct StatusMenuView: View {
                         get: { state.launchAtLogin },
                         set: { state.launchAtLogin = $0 }
                     ),
-                    title: "로그인 시 자동 시작",
+                    title: L("로그인 시 자동 시작"),
                     caption: nil
                 )
             }
@@ -166,9 +173,9 @@ struct StatusMenuView: View {
 
             // 푸터
             HStack {
-                Button("팔레트 열기\(paletteShortcutLabel)") { state.togglePalette() }
+                Button(L("팔레트 열기%@", paletteShortcutLabel)) { state.togglePalette() }
                 Spacer()
-                Button("쌈지 종료") { NSApp.terminate(nil) }
+                Button(L("쌈지 종료")) { NSApp.terminate(nil) }
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
@@ -265,11 +272,11 @@ struct StatusMenuView: View {
 
     private var excludedAppsBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("수집 제외 앱")
+            Text(L("수집 제외 앱"))
                 .font(.caption)
 
             if state.excludedApps.isEmpty {
-                Text("제외된 앱이 없습니다 · 팔레트에서 Cmd E 로도 추가")
+                Text(L("제외된 앱이 없습니다 · 팔레트에서 Cmd E 로도 추가"))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             } else {
@@ -280,7 +287,7 @@ struct StatusMenuView: View {
                             .font(.caption)
                             .lineLimit(1)
                         Spacer()
-                        Button("해제") { state.removeExcludedApp(bundleID) }
+                        Button(L("해제")) { state.removeExcludedApp(bundleID) }
                             .buttonStyle(.borderless)
                             .font(.caption2)
                     }
@@ -288,14 +295,14 @@ struct StatusMenuView: View {
             }
 
             HStack(spacing: 10) {
-                Menu("＋ 실행 중인 앱에서") {
+                Menu(L("＋ 실행 중인 앱에서")) {
                     ForEach(runningApps, id: \.bundleID) { app in
                         Button(app.name) { state.excludeApp(bundleID: app.bundleID) }
                     }
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                Button("파일에서 선택…") { chooseAppFromFinder() }
+                Button(L("파일에서 선택…")) { chooseAppFromFinder() }
                     .buttonStyle(.borderless)
             }
             .font(.caption2)

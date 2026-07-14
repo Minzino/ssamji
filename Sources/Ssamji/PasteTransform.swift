@@ -16,16 +16,16 @@ enum PasteTransform: CaseIterable {
 
     var label: String {
         switch self {
-        case .uppercase: return "대문자로 (UPPERCASE)"
-        case .lowercase: return "소문자로 (lowercase)"
-        case .trimmed: return "공백 정리 (trim)"
-        case .slug: return "슬러그 (kebab-case)"
-        case .snake: return "스네이크 (snake_case)"
-        case .jsonPretty: return "JSON 정리 (pretty print)"
-        case .promptStrip: return "프롬프트 제거 ($ · # 접두)"
-        case .shellEscape: return "셸 이스케이프 ('안전 인용')"
-        case .andOneLiner: return "&& 원라이너 (한 줄로)"
-        case .backslashMultiline: return "역슬래시 멀티라인 (\\ 줄 나눔)"
+        case .uppercase: return L("대문자로 (UPPERCASE)")
+        case .lowercase: return L("소문자로 (lowercase)")
+        case .trimmed: return L("공백 정리 (trim)")
+        case .slug: return L("슬러그 (kebab-case)")
+        case .snake: return L("스네이크 (snake_case)")
+        case .jsonPretty: return L("JSON 정리 (pretty print)")
+        case .promptStrip: return L("프롬프트 제거 ($ · # 접두)")
+        case .shellEscape: return L("셸 이스케이프 ('안전 인용')")
+        case .andOneLiner: return L("&& 원라이너 (한 줄로)")
+        case .backslashMultiline: return L("역슬래시 멀티라인 (\\ 줄 나눔)")
         }
     }
 

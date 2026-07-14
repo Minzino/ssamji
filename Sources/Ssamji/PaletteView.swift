@@ -158,12 +158,12 @@ struct PaletteView: View {
                 .onTapGesture { vm.cancelBoardDelete() }
             VStack(alignment: .leading, spacing: 10) {
                 // 파괴 액션 카드 — 세로 캡슐·테두리를 danger(단청 주홍)로
-                SsamjiCardTitle(text: "보드 삭제", tint: SsamjiColor.danger)
+                SsamjiCardTitle(text: L("보드 삭제"), tint: SsamjiColor.danger)
                     .foregroundStyle(SsamjiColor.danger)
-                Text("'\(vm.boardPendingDeleteName)' 보드를 삭제할까요?\n항목들은 삭제되지 않고 히스토리에 남습니다.\n(오래된 항목은 보관 기간 정책의 적용을 받게 됩니다)")
+                Text(L("'%@' 보드를 삭제할까요?\n항목들은 삭제되지 않고 히스토리에 남습니다.\n(오래된 항목은 보관 기간 정책의 적용을 받게 됩니다)", vm.boardPendingDeleteName))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("Enter 삭제 · esc 취소")
+                Text(L("Enter 삭제 · esc 취소"))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -193,7 +193,7 @@ struct PaletteView: View {
     private var boardTabs: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                boardTab(title: "전체", color: nil, secret: false, id: nil)
+                boardTab(title: L("전체"), color: nil, secret: false, id: nil)
                 ForEach(vm.boards) { board in
                     boardTab(
                         title: board.name,
@@ -202,15 +202,15 @@ struct PaletteView: View {
                         id: board.id
                     )
                     .contextMenu {
-                        Button(board.isSecret ? "시크릿 해제" : "시크릿으로 전환") { vm.toggleBoardSecret(board) }
+                        Button(board.isSecret ? L("시크릿 해제") : L("시크릿으로 전환")) { vm.toggleBoardSecret(board) }
                         Divider()
-                        Button("← 왼쪽으로 이동") { vm.moveBoard(board, by: -1) }
+                        Button(L("← 왼쪽으로 이동")) { vm.moveBoard(board, by: -1) }
                             .disabled(vm.boards.first?.id == board.id)
-                        Button("오른쪽으로 이동 →") { vm.moveBoard(board, by: 1) }
+                        Button(L("오른쪽으로 이동 →")) { vm.moveBoard(board, by: 1) }
                             .disabled(vm.boards.last?.id == board.id)
                         Divider()
                         // 즉발 삭제 금지 — ⌘⇧⌫ 와 동일한 확인 카드를 거친다 (인시던트 재발 방지)
-                        Button("보드 삭제…", role: .destructive) { vm.requestDeleteBoard(board) }
+                        Button(L("보드 삭제…"), role: .destructive) { vm.requestDeleteBoard(board) }
                     }
                 }
             }
@@ -263,15 +263,15 @@ struct PaletteView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(vm.query.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(SsamjiColor.accent))
-            TextField("쌈지 검색…", text: $vm.query)
+            TextField(L("쌈지 검색…"), text: $vm.query)
                 .textFieldStyle(.plain)
                 .font(SsamjiFont.searchField)
                 .focused($searchFocused)
             if !vm.results.isEmpty {
                 // 로드된 수 / 전체 매칭 수 — 상한(50)에 걸려 있으면 정직하게 표기, ↓로 더 불러옴
                 Text(vm.hasMore || vm.results.count < vm.totalMatching
-                     ? "\(vm.results.count) / \(vm.totalMatching)개"
-                     : "\(vm.results.count)개")
+                     ? L("%d / %d개", vm.results.count, vm.totalMatching)
+                     : L("%d개", vm.results.count))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -331,7 +331,7 @@ struct PaletteView: View {
                         Image(systemName: vm.query.isEmpty ? "bag" : "bag.badge.questionmark")
                             .font(.system(size: 34, weight: .light))
                             .foregroundStyle(SsamjiColor.accent.opacity(0.45))
-                        Text(vm.query.isEmpty ? "아직 쌈지가 비어 있어요" : "그물에 걸린 게 없어요")
+                        Text(vm.query.isEmpty ? L("아직 쌈지가 비어 있어요") : L("그물에 걸린 게 없어요"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -359,7 +359,7 @@ struct PaletteView: View {
                 metaBar(for: item)
             } else {
                 Spacer()
-                Text("항목을 선택하세요")
+                Text(L("항목을 선택하세요"))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
                 Spacer()
@@ -375,13 +375,13 @@ struct PaletteView: View {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 56, weight: .regular))
                     .foregroundStyle(SsamjiColor.goldGlaze)
-                Text(item.customTitle?.isEmpty == false ? item.customTitle! : "시크릿 항목")
+                Text(item.customTitle?.isEmpty == false ? item.customTitle! : L("시크릿 항목"))
                     .font(.headline)
-                Text("Enter 로 바로 붙여넣기 · Option 을 누르고 있는 동안 내용 표시")
+                Text(L("Enter 로 바로 붙여넣기 · Option 을 누르고 있는 동안 내용 표시"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("내용 표시") { vm.secretRevealed = true }
+                Button(L("내용 표시")) { vm.secretRevealed = true }
                     .controlSize(.small)
             }
             .frame(maxWidth: .infinity)
@@ -435,7 +435,7 @@ struct PaletteView: View {
             if let path = item.imagePath {
                 AsyncImagePreview(path: path)
             } else {
-                Text("이미지를 불러올 수 없음").foregroundStyle(.secondary)
+                Text(L("이미지를 불러올 수 없음")).foregroundStyle(.secondary)
             }
         case .file:
             VStack(alignment: .leading, spacing: 6) {
@@ -469,11 +469,11 @@ struct PaletteView: View {
                     get: { vm.isAppExcluded(item) },
                     set: { _ in vm.toggleExcludeApp(for: item) }
                 )) {
-                    Text("이 앱 수집 제외")
+                    Text(L("이 앱 수집 제외"))
                 }
                 .toggleStyle(.checkbox)
                 .controlSize(.small)
-                .help("이 항목의 출처 앱에서 복사한 내용을 앞으로 수집하지 않습니다 (⌘E)")
+                .help(L("이 항목의 출처 앱에서 복사한 내용을 앞으로 수집하지 않습니다 (⌘E)"))
             }
         }
         .font(.caption)
@@ -490,18 +490,18 @@ struct PaletteView: View {
 
     private var hintBar: some View {
         HStack(spacing: 12) {
-            hint("Enter", vm.directPasteEnabled ? "붙여넣기" : "복사")
-            hint("Cmd K", "스택")
+            hint("Enter", vm.directPasteEnabled ? L("붙여넣기") : L("복사"))
+            hint("Cmd K", L("스택"))
             if vm.stack.isEmpty {
                 // 보드 힌트는 스택이 비었을 때만 — 스택이 차면 아래 스택 블록이 자리를 대신한다
-                hint("Cmd P", "보드 담기")
+                hint("Cmd P", L("보드 담기"))
                     .contentShape(Rectangle())
                     .onTapGesture { vm.openPicker() }
-                hint("Cmd N", "새 보드")
+                hint("Cmd N", L("새 보드"))
                     .contentShape(Rectangle())
                     .onTapGesture { vm.openBoardCreate() }
-                hint("Cmd [", "이전 보드")
-                hint("Cmd ]", "다음 보드")
+                hint("Cmd [", L("이전 보드"))
+                hint("Cmd ]", L("다음 보드"))
             }
             if !vm.stack.isEmpty {
                 // 숫자 카운터는 이 Text 하나에만 numericText 트랜지션 (리프 한정 — 헌법 2조)
@@ -511,20 +511,20 @@ struct PaletteView: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                    Text("스택 \(vm.stack.count)개 붙여넣기")
+                    Text(L("스택 %d개 붙여넣기", vm.stack.count))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
                         .animation(.easeOut(duration: 0.18), value: vm.stack.count)
                 }
                 // 명시적 비우기 — 키보드(⌘⇧K)와 마우스(힌트 클릭) 동일 동작
-                hint("Cmd Shift K", "비우기")
+                hint("Cmd Shift K", L("비우기"))
                     .contentShape(Rectangle())
                     .onTapGesture { vm.clearStack() }
             }
             Spacer()
             // 나머지 단축키는 전부 ⌘/ 도움말로 — 상시 8개 힌트의 인지 부하 대신 발견 가능한 사전
-            hint("Cmd /", "단축키")
+            hint("Cmd /", L("단축키"))
                 .contentShape(Rectangle())
                 .onTapGesture { vm.helpVisible = true }
         }
@@ -733,7 +733,7 @@ private struct TextPreviewBody: View, Equatable {
         switch content {
         case .json(let pretty, let truncated):
             VStack(alignment: .leading, spacing: 6) {
-                Label(truncated ? "JSON — 앞부분만 표시" : "JSON", systemImage: "curlybraces")
+                Label(truncated ? L("JSON — 앞부분만 표시") : "JSON", systemImage: "curlybraces")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Text(pretty)
@@ -742,7 +742,7 @@ private struct TextPreviewBody: View, Equatable {
             }
         case .code(let highlighted, let truncated):
             VStack(alignment: .leading, spacing: 6) {
-                Label(truncated ? "코드 — 앞부분만 표시" : "코드", systemImage: "chevron.left.forwardslash.chevron.right")
+                Label(truncated ? L("코드 — 앞부분만 표시") : L("코드"), systemImage: "chevron.left.forwardslash.chevron.right")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Text(highlighted)
@@ -751,7 +751,7 @@ private struct TextPreviewBody: View, Equatable {
         case .plain(let text, let truncated):
             VStack(alignment: .leading, spacing: 6) {
                 if truncated {
-                    Text("긴 텍스트 — 앞부분만 표시 (붙여넣기는 전체)")
+                    Text(L("긴 텍스트 — 앞부분만 표시 (붙여넣기는 전체)"))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -769,41 +769,41 @@ private struct TextPreviewBody: View, Equatable {
 private struct HelpCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SsamjiCardTitle(text: "단축키", tint: SsamjiColor.accent)
+            SsamjiCardTitle(text: L("단축키"), tint: SsamjiColor.accent)
             HStack(alignment: .top, spacing: 26) {
                 VStack(alignment: .leading, spacing: 14) {
-                    group("실행", [
-                        ("Enter", "붙여넣기"),
-                        ("Shift Enter", "복사만"),
-                        ("Cmd 1–9", "바로 붙여넣기"),
-                        ("Option 홀드", "시크릿 내용 보기"),
+                    group(L("실행"), [
+                        ("Enter", L("붙여넣기")),
+                        ("Shift Enter", L("복사만")),
+                        ("Cmd 1–9", L("바로 붙여넣기")),
+                        (L("Option 홀드"), L("시크릿 내용 보기")),
                     ])
-                    group("스택", [
-                        ("Cmd K", "담기 · 빼기"),
-                        ("Cmd Enter", "스택 붙여넣기"),
-                        ("Cmd Shift K", "스택 비우기"),
+                    group(L("스택"), [
+                        ("Cmd K", L("담기 · 빼기")),
+                        ("Cmd Enter", L("스택 붙여넣기")),
+                        ("Cmd Shift K", L("스택 비우기")),
                     ])
                 }
                 VStack(alignment: .leading, spacing: 14) {
-                    group("정리", [
-                        ("Cmd T", "변환해서 붙여넣기"),
-                        ("Cmd R", "라벨 지정"),
-                        ("Cmd E", "이 앱 수집 제외"),
-                        ("Cmd ⌫", "삭제"),
+                    group(L("정리"), [
+                        ("Cmd T", L("변환해서 붙여넣기")),
+                        ("Cmd R", L("라벨 지정")),
+                        ("Cmd E", L("이 앱 수집 제외")),
+                        ("Cmd ⌫", L("삭제")),
                     ])
-                    group("보드", [
-                        ("Cmd N", "새 보드 만들기"),
-                        ("Cmd P", "선택 항목을 보드에 담기"),
-                        ("Cmd [", "이전 보드 보기"),
-                        ("Cmd ]", "다음 보드 보기"),
-                        ("Cmd Shift ←", "보드를 왼쪽으로 옮기기"),
-                        ("Cmd Shift →", "보드를 오른쪽으로 옮기기"),
-                        ("Cmd Shift S", "시크릿 전환"),
-                        ("Cmd Shift ⌫", "보드 삭제"),
+                    group(L("보드"), [
+                        ("Cmd N", L("새 보드 만들기")),
+                        ("Cmd P", L("선택 항목을 보드에 담기")),
+                        ("Cmd [", L("이전 보드 보기")),
+                        ("Cmd ]", L("다음 보드 보기")),
+                        ("Cmd Shift ←", L("보드를 왼쪽으로 옮기기")),
+                        ("Cmd Shift →", L("보드를 오른쪽으로 옮기기")),
+                        ("Cmd Shift S", L("시크릿 전환")),
+                        ("Cmd Shift ⌫", L("보드 삭제")),
                     ])
                 }
             }
-            Text("Cmd Shift E 은신 모드 · 아무 키나 누르면 닫힙니다")
+            Text(L("Cmd Shift E 은신 모드 · 아무 키나 누르면 닫힙니다"))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -886,7 +886,7 @@ private struct TransformPickerCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SsamjiCardTitle(text: "변환해서 붙여넣기")
+            SsamjiCardTitle(text: L("변환해서 붙여넣기"))
             VStack(spacing: 2) {
                 ForEach(Array(vm.transformOptions.enumerated()), id: \.offset) { index, transform in
                     let selected = index == vm.transformIndex
@@ -921,7 +921,7 @@ private struct TransformPickerCard: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("Enter 붙여넣기 · Shift Enter 복사만 · esc 취소 (원본은 그대로 보존)")
+            Text(L("Enter 붙여넣기 · Shift Enter 복사만 · esc 취소 (원본은 그대로 보존)"))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -935,7 +935,7 @@ private struct StackPickerCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SsamjiCardTitle(text: "스택 \(vm.stack.count)개 붙여넣기")
+            SsamjiCardTitle(text: L("스택 %d개 붙여넣기", vm.stack.count))
             VStack(spacing: 2) {
                 ForEach(Array(PaletteViewModel.stackCommitOptions.enumerated()), id: \.offset) { index, option in
                     let selected = index == vm.stackPickerIndex
@@ -960,7 +960,7 @@ private struct StackPickerCard: View {
                     }
                 }
             }
-            Text("Enter 붙여넣기 · Shift Enter 복사만 · esc 취소 · Cmd Shift K 스택 비우기")
+            Text(L("Enter 붙여넣기 · Shift Enter 복사만 · esc 취소 · Cmd Shift K 스택 비우기"))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -976,7 +976,7 @@ private struct BoardPickerCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Cmd N 독립 생성은 배정 리스트 없이 이름 입력만 — 제목도 행동에 맞춘다
-            SsamjiCardTitle(text: vm.creatingBoardStandalone ? "새 보드 만들기" : "보드에 넣기")
+            SsamjiCardTitle(text: vm.creatingBoardStandalone ? L("새 보드 만들기") : L("보드에 넣기"))
 
             if !vm.creatingBoardStandalone {
                 VStack(spacing: 2) {
@@ -994,15 +994,15 @@ private struct BoardPickerCard: View {
                     Divider()
                 }
                 HStack(spacing: 8) {
-                    TextField("새 보드 이름", text: $vm.newBoardName)
+                    TextField(L("새 보드 이름"), text: $vm.newBoardName)
                         .textFieldStyle(.roundedBorder)
                         .focused($nameFocused)
                         .onSubmit { vm.confirmCreateBoard() }
-                    Toggle("시크릿", isOn: $vm.newBoardSecret)
+                    Toggle(L("시크릿"), isOn: $vm.newBoardSecret)
                         .toggleStyle(.checkbox)
                         .font(.caption)
                 }
-                Text("Enter 만들기 · Cmd S 시크릿 토글 · esc 취소")
+                Text(L("Enter 만들기 · Cmd S 시크릿 토글 · esc 취소"))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -1024,7 +1024,7 @@ private struct BoardPickerCard: View {
     /// Cmd N 독립 생성 모드의 기존 보드 참고 목록 — 흐리게, 상호작용 없음
     private var boardReferenceList: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("지금 있는 보드")
+            Text(L("지금 있는 보드"))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
             ForEach(vm.boards.prefix(6)) { board in
@@ -1042,7 +1042,7 @@ private struct BoardPickerCard: View {
                 .foregroundStyle(.secondary)
             }
             if vm.boards.count > 6 {
-                Text("외 \(vm.boards.count - 6)개")
+                Text(L("외 %d개", vm.boards.count - 6))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -1093,15 +1093,15 @@ private struct RenameCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SsamjiCardTitle(text: "라벨 지정")
-            Text("마스킹돼도 라벨은 목록에 표시됩니다.")
+            SsamjiCardTitle(text: L("라벨 지정"))
+            Text(L("마스킹돼도 라벨은 목록에 표시됩니다."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            TextField("예: vsphere pw", text: $vm.renameText)
+            TextField(L("예: vsphere pw"), text: $vm.renameText)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .onSubmit { vm.confirmRename() }
-            Text("Enter 저장 · esc 취소 · 비워두면 라벨 제거")
+            Text(L("Enter 저장 · esc 취소 · 비워두면 라벨 제거"))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }

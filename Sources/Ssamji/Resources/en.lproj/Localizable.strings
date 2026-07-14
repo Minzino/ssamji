@@ -1,0 +1,187 @@
+/* Ssamji — English localization. Keys are the Korean source strings (see L10n.swift). */
+
+/* Feedback HUD */
+"%@ 복사됨" = "Copied %@";
+"%@ 붙여넣음" = "Pasted %@";
+"%@ 수집 제외" = "Excluded %@ from collection";
+"%@ 수집 제외 해제" = "Removed %@ from exclusions";
+"복사됨" = "Copied";
+"붙여넣음" = "Pasted";
+"붙여넣음 → %@" = "Pasted → %@";
+"스택 비움" = "Stack cleared";
+"쌈지를 여몄어요 — 수집 일시정지" = "Ssamji is cinched — collection paused";
+"쌈지를 열었어요 — 수집 재개" = "Ssamji is open — collection resumed";
+"순차 모드 — 스택 1/%d 준비 (⌘V 로 하나씩)" = "Sequential mode — stack 1/%d ready (⌘V pastes one at a time)";
+"순차 모드 종료 — 새 복사 감지" = "Sequential mode ended — new copy detected";
+"순차 모드에는 손쉬운 사용 권한이 필요해요" = "Sequential mode requires the Accessibility permission";
+"스택 %d/%d 붙여넣음" = "Pasted %d/%d from the stack";
+"스택 %d/%d 붙여넣음 — 순차 모드 완료" = "Pasted %d/%d from the stack — sequential mode complete";
+"스택 %d개" = "Stack: %d";
+
+/* Errors */
+"기록 저장 실패 — %@" = "Failed to save item — %@";
+"수집 저장 실패 — %@" = "Failed to store item — %@";
+"라벨 저장 실패 — %@" = "Failed to save label — %@";
+"보드 배정 실패 — %@" = "Failed to assign board — %@";
+"보드 삭제 실패 — %@" = "Failed to delete board — %@";
+"보드 생성 실패 — %@" = "Failed to create board — %@";
+"보드 이동 실패 — %@" = "Failed to move board — %@";
+"시크릿 설정 실패 — %@" = "Failed to update secret — %@";
+"삭제 실패 — %@" = "Failed to delete — %@";
+"실패: %@" = "Failed: %@";
+"저장 실패: %@" = "Save failed: %@";
+"저장소 초기화 실패: %@" = "Failed to initialize storage: %@";
+"로그인 시작 설정 실패: %@" = "Failed to set launch at login: %@";
+"클립보드 준비 실패 — 원본을 읽을 수 없어요" = "Couldn't prepare clipboard — the original can't be read";
+
+/* Palette — search & list */
+"쌈지 검색…" = "Search Ssamji…";
+"%d / %d개" = "%d / %d";
+"%d개" = "%d";
+"전체" = "All";
+"그물에 걸린 게 없어요" = "Nothing caught in the net";
+"아직 쌈지가 비어 있어요" = "Your ssamji is still empty";
+"항목을 선택하세요" = "Select an item";
+"시크릿 항목" = "Secret item";
+"이미지 %d×%d" = "Image %d×%d";
+"이미지를 불러올 수 없음" = "Couldn't load image";
+"(공백)" = "(whitespace)";
+"코드" = "Code";
+"코드 — 앞부분만 표시" = "Code — showing the beginning only";
+"JSON — 앞부분만 표시" = "JSON — showing the beginning only";
+"긴 텍스트 — 앞부분만 표시 (붙여넣기는 전체)" = "Long text — showing the beginning only (pasting uses the full text)";
+"이 앱 수집 제외" = "Exclude this app";
+"이 항목의 출처 앱에서 복사한 내용을 앞으로 수집하지 않습니다 (⌘E)" = "Stops collecting from this item's source app (⌘E)";
+"내용 표시" = "Reveal content";
+"Enter 로 바로 붙여넣기 · Option 을 누르고 있는 동안 내용 표시" = "Enter pastes directly · hold Option to reveal the content";
+
+/* Palette — hint bar */
+"붙여넣기" = "Paste";
+"복사" = "Copy";
+"스택" = "Stack";
+"보드 담기" = "To board";
+"새 보드" = "New board";
+"이전 보드" = "Prev";
+"다음 보드" = "Next";
+"삭제" = "Delete";
+"단축키" = "Shortcuts";
+"비우기" = "Clear";
+"스택 %d개 붙여넣기" = "Paste %d stacked items";
+
+/* Help card (⌘/) */
+"실행" = "Actions";
+"정리" = "Organize";
+"보드" = "Boards";
+"바로 붙여넣기" = "Paste instantly";
+"복사만" = "Copy only";
+"Option 홀드" = "Hold Option";
+"시크릿 내용 보기" = "Peek at secret content";
+"담기 · 빼기" = "Add · remove";
+"스택 붙여넣기" = "Paste the stack";
+"스택 비우기" = "Clear the stack";
+"변환해서 붙여넣기" = "Paste with transform";
+"라벨 지정" = "Set Label";
+"새 보드 만들기" = "Create New Board";
+"선택 항목을 보드에 담기" = "Add selection to a board";
+"이전 보드 보기" = "Go to the previous board";
+"다음 보드 보기" = "Go to the next board";
+"보드를 왼쪽으로 옮기기" = "Move board left";
+"보드를 오른쪽으로 옮기기" = "Move board right";
+"시크릿 전환" = "Toggle secret";
+"보드 삭제" = "Delete Board";
+"Cmd Shift E 은신 모드 · 아무 키나 누르면 닫힙니다" = "Cmd Shift E stealth mode · press any key to close";
+
+/* Board picker & creation */
+"보드에 넣기" = "Add to Board";
+"보드에서 제거" = "Remove from board";
+"새 보드 만들기…" = "Create new board…";
+"새 보드 이름" = "New board name";
+"시크릿" = "Secret";
+"지금 있는 보드" = "Existing boards";
+"외 %d개" = "and %d more";
+"Enter 만들기 · Cmd S 시크릿 토글 · esc 취소" = "Enter to create · Cmd S toggles secret · esc to cancel";
+"'%@' 보드를 삭제할까요?\n항목들은 삭제되지 않고 히스토리에 남습니다.\n(오래된 항목은 보관 기간 정책의 적용을 받게 됩니다)" = "Delete board '%@'?\nIts items are not deleted and remain in history.\n(Old items become subject to the retention policy.)";
+"Enter 삭제 · esc 취소" = "Enter to delete · esc to cancel";
+
+/* Board tab context menu */
+"← 왼쪽으로 이동" = "← Move left";
+"오른쪽으로 이동 →" = "Move right →";
+"시크릿으로 전환" = "Make secret";
+"시크릿 해제" = "Remove secret";
+"보드 삭제…" = "Delete Board…";
+
+/* Label card (⌘R) */
+"마스킹돼도 라벨은 목록에 표시됩니다." = "The label stays visible in the list even when masked.";
+"예: vsphere pw" = "e.g. vsphere pw";
+"Enter 저장 · esc 취소 · 비워두면 라벨 제거" = "Enter to save · esc to cancel · leave empty to remove the label";
+
+/* Transform picker (⌘T) */
+"원문" = "Original";
+"대문자로 (UPPERCASE)" = "UPPERCASE";
+"소문자로 (lowercase)" = "lowercase";
+"공백 정리 (trim)" = "Trim whitespace";
+"슬러그 (kebab-case)" = "kebab-case";
+"스네이크 (snake_case)" = "snake_case";
+"JSON 정리 (pretty print)" = "Pretty-print JSON";
+"셸 이스케이프 ('안전 인용')" = "Shell escape (safe quoting)";
+"프롬프트 제거 ($ · # 접두)" = "Strip prompts ($ · # prefixes)";
+"역슬래시 멀티라인 (\\ 줄 나눔)" = "Backslash multiline (\\ line breaks)";
+"&& 원라이너 (한 줄로)" = "&& one-liner (single line)";
+"Enter 붙여넣기 · Shift Enter 복사만 · esc 취소 (원본은 그대로 보존)" = "Enter pastes · Shift Enter copies only · esc cancels (original is preserved)";
+
+/* Stack picker (⌘⏎) */
+"개행으로 (한 줄씩)" = "Join with newlines (one per line)";
+"공백으로" = "Join with spaces";
+"콤마로 (a, b, c)" = "Join with commas (a, b, c)";
+"&& 원라이너로" = "Join with &&";
+"하나씩 순차 붙여넣기 (⌘V 마다 다음)" = "Paste one at a time (each ⌘V advances)";
+"Enter 붙여넣기 · Shift Enter 복사만 · esc 취소 · Cmd Shift K 스택 비우기" = "Enter pastes · Shift Enter copies only · esc cancels · Cmd Shift K clears the stack";
+
+/* Settings window */
+"쌈지" = "Ssamji";
+"그물과 매듭" = "Net & Knot";
+"쌈지, 문을 열다" = "Opening the pouch";
+"수집 중" = "Collecting";
+"수집 꺼짐" = "Collection off";
+"은신 중" = "Stealth on";
+"· 권한 정상" = "· permissions OK";
+"%d개 보관" = "%d items stored";
+"클립보드 접근 권한이 필요해요" = "Clipboard access needed";
+"시스템 설정 > 개인정보 보호 및 보안에서 쌈지를 '항상 허용'으로 설정하세요." = "In System Settings > Privacy & Security, set Ssamji to 'Always Allow'.";
+"설정 열기" = "Open Settings";
+"손쉬운 사용 권한이 필요해요" = "Accessibility permission needed";
+"다이렉트 붙여넣기(⌘V 시뮬레이션)에 쓰입니다" = "Used for direct paste (simulated ⌘V)";
+"허용 전까지 Enter 는 클립보드 복사만 합니다." = "Until allowed, Enter only copies to the clipboard.";
+"권한 요청" = "Request Permission";
+"Enter 로 바로 붙여넣기" = "Paste directly with Enter";
+"끄면 클립보드에 복사만 합니다" = "When off, items are only copied to the clipboard";
+"붙여넣은 뒤 원래 클립보드 복원" = "Restore clipboard after pasting";
+"1초 후 이전 내용으로 되돌립니다" = "Restores the previous contents after 1 second";
+"수집" = "Collection";
+"은신 모드" = "Stealth mode";
+"수집만 잠시 멈춥니다 · 팔레트에서 Cmd Shift E" = "Pauses collection only · Cmd Shift E in the palette";
+"히스토리 보관" = "Keep history";
+"%d일" = "%d days";
+"무제한" = "Unlimited";
+"보드에 넣은 항목은 기간과 무관하게 보존됩니다." = "Items on boards are kept regardless of retention.";
+"수집 제외 앱" = "Excluded apps";
+"제외된 앱이 없습니다 · 팔레트에서 Cmd E 로도 추가" = "No excluded apps · you can also add with Cmd E in the palette";
+"＋ 실행 중인 앱에서" = "＋ From running apps";
+"파일에서 선택…" = "Choose from file…";
+"해제" = "Remove";
+"시스템" = "System";
+"팔레트 단축키" = "Palette shortcut";
+"로그인 시 자동 시작" = "Launch at login";
+"팔레트 열기%@" = "Open Palette%@";
+"쌈지 종료" = "Quit Ssamji";
+
+/* Permissions status labels */
+"항상 허용" = "Always allowed";
+"매번 확인" = "Ask every time";
+"거부됨" = "Denied";
+"기본값 (미설정)" = "Default (not set)";
+
+/* Paste importer */
+"가져오는 중…" = "Importing…";
+"가져온 보드" = "Imported board";
+"가져옴 %d · 병합 %d · 실패 %d · 보드 %d개 생성" = "Imported %d · merged %d · failed %d · created %d boards";
