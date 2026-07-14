@@ -37,7 +37,7 @@ struct StatusMenuView: View {
     /// 화면 표기가 배포 버전과 어긋나던 것 방지. 릴리스명은 릴리스마다 여기서 교체.
     private var versionLabel: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
-        return "v\(version) · " + L("쌈지, 문을 열다")
+        return "v\(version) · " + L("금고와 나루")
     }
 
     var body: some View {
@@ -151,6 +151,12 @@ struct StatusMenuView: View {
             // 시스템
             sectionLabel(L("시스템"))
             groupCard {
+                toggleRow(
+                    isOn: $state.iCloudSyncEnabled,
+                    title: L("iCloud 동기화 (베타)"),
+                    caption: L("iCloud Drive 폴더로 Mac 간 동기화 · 시크릿·이미지·파일 제외")
+                )
+                groupSeparator
                 HStack {
                     Text(L("팔레트 단축키"))
                         .font(.caption)

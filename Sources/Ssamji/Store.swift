@@ -324,6 +324,21 @@ final class Store {
         }
     }
 
+    /// 동기화 임포트: 같은 checksum 이 없을 때만 삽입 — save() 와 달리 기존 항목의 updatedAt 을
+    /// 끌어올리지 않는다 (다른 Mac 에서 온 항목이 로컬 히스토리 순서를 흔들지 않게).
+    @discardableResult
+    func importIfAbsent(_ item: ClipItem) throws -> Bool {
+        try dbQueue.write { db in
+            let exists = try ClipItem
+                .filter(Column("checksum") == item.checksum)
+                .fetchCount(db) > 0
+            if exists { return false }
+            var new = item
+            try new.insert(db)
+            return true
+        }
+    }
+
     func recent(limit: Int = 20) throws -> [ClipItem] {
         try items(matching: "", boardID: nil, limit: limit)
     }

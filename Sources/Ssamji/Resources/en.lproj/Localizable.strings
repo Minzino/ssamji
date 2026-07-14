@@ -190,3 +190,14 @@
 "시크릿 내용을 보기 위해 인증합니다" = "authenticate to reveal secret content";
 "시크릿 항목을 붙여넣기 위해 인증합니다" = "authenticate to paste a secret item";
 "인증되지 않아 취소했어요" = "Canceled — authentication failed";
+
+/* iCloud Drive sync */
+"iCloud 동기화 (베타)" = "iCloud sync (beta)";
+"iCloud Drive 폴더로 Mac 간 동기화 · 시크릿·이미지·파일 제외" = "Sync between Macs via an iCloud Drive folder · excludes secrets, images, files";
+"다른 Mac 에서 %d개 가져옴" = "Imported %d from another Mac";
+"iCloud 동기화 폴더에 접근할 수 없어요: %@" = "Can't access the iCloud sync folder: %@";
+"iCloud 동기화 폴더를 읽을 수 없어요: %@" = "Can't read the iCloud sync folder: %@";
+"동기화 파일을 읽을 수 없어요: %@" = "Can't read a sync file: %@";
+"동기화 내보내기 실패: %@" = "Sync export failed: %@";
+"동기화 회수 실패: %@" = "Sync recall failed: %@";
+"금고와 나루" = "Vault & Ferry";

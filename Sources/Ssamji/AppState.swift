@@ -103,6 +103,17 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// iCloud Drive 폴더 기반 Mac 간 동기화 (베타). store 는 셋업에서 주입한다.
+    let syncEngine = SyncEngine()
+
+    /// iCloud 동기화 온오프 — UserDefaults 미러 + syncEngine 시작/중지. 초기값은 UserDefaults 에서 로드.
+    @Published var iCloudSyncEnabled: Bool = UserDefaults.standard.bool(forKey: "iCloudSyncEnabled") {
+        didSet {
+            guard oldValue != iCloudSyncEnabled else { return }
+            syncEngine.setEnabled(iCloudSyncEnabled)
+        }
+    }
+
     private(set) var store: Store?
     private(set) var palette: PaletteController?
     private let watcher = ClipboardWatcher()
@@ -145,9 +156,23 @@ final class AppState: ObservableObject {
             }
             controller.viewModel.directPasteEnabled = directPasteEnabled
             controller.viewModel.excludedApps = excludedApps
+            // 항목이 시크릿 보드로 봉인되면 클라우드에서도 회수 (평문이 남지 않게)
+            controller.viewModel.onItemSealed = { [weak self] checksum in
+                self?.syncEngine.removeFromExport(checksum: checksum)
+            }
             palette = controller
             // 첫 개방 즉시 타이핑 반응을 위해 패널 사전 생성
             controller.prewarm()
+        }
+
+        // iCloud 동기화 배선 — store 주입 후 콜백 연결, enabled 면 시작
+        syncEngine.store = store
+        syncEngine.onImported = { [weak self] count in
+            self?.refresh()
+            FeedbackHUD.shared.success(L("다른 Mac 에서 %d개 가져옴", count))
+        }
+        if iCloudSyncEnabled {
+            syncEngine.setEnabled(true)
         }
 
         KeyboardShortcuts.onKeyUp(for: .togglePalette) { [weak self] in
@@ -256,7 +281,8 @@ final class AppState: ObservableObject {
         guard let item = PasteboardReader.capture(from: pasteboard, blobsDirectory: store.blobsDirectory) else { return }
         if let bundleID = item.sourceAppBundleID, excludedApps.contains(bundleID) { return }
         do {
-            try store.save(item)
+            let saved = try store.save(item)
+            syncEngine.export(saved)
             refresh()
             cleanupIfDue()
         } catch {
