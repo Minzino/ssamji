@@ -44,10 +44,12 @@ final class PaletteViewModel: ObservableObject {
 
     /// 텍스트 프리뷰의 사전 계산 결과 — body 에서 매번 하이라이트/JSON 정리를 다시 돌리면
     /// 키 입력마다 CoreText 전체 재조판이 일어난다 (프로파일로 확인된 최대 병목)
+    /// json/plain 도 AttributedString — CJK 구간 폰트 폴백을 사전 해석해 담는다
+    /// (CodeHighlighter.cjkResolved, 한글 5,000자 조판 625ms → 60ms 측정 확인)
     enum TextPreviewContent {
-        case json(String, truncated: Bool)
+        case json(AttributedString, truncated: Bool)
         case code(AttributedString, truncated: Bool)
-        case plain(String, truncated: Bool)
+        case plain(AttributedString, truncated: Bool)
         case none
     }
 
@@ -78,13 +80,17 @@ final class PaletteViewModel: ObservableObject {
         let text = item.text ?? ""
         if let pretty = PasteTransform.prettyJSON(text) {
             let (display, truncated) = Self.truncateForDisplay(pretty)
-            previewContent = .json(display, truncated: truncated)
+            // 12 = 뷰의 .callout 모노와 동일 포인트 (폴백이 골랐을 크기 그대로)
+            previewContent = .json(CodeHighlighter.cjkResolved(display, size: 12), truncated: truncated)
         } else if CodeHighlighter.looksLikeCode(text) {
             let (display, truncated) = Self.truncateForDisplay(text)
             previewContent = .code(CodeHighlighter.highlight(display), truncated: truncated)
         } else {
             let (display, truncated) = Self.truncateForDisplay(text)
-            previewContent = .plain(display, truncated: truncated)
+            // NSFont.systemFontSize(13) = 뷰의 .body 모노와 동일 포인트
+            previewContent = .plain(
+                CodeHighlighter.cjkResolved(display, size: NSFont.systemFontSize),
+                truncated: truncated)
         }
     }
 
@@ -93,10 +99,18 @@ final class PaletteViewModel: ObservableObject {
     /// 한 줄이 수천 자면 단일 CTLine 통조판이 폭주해 키 입력을 막는다 (프로파일 확인 병목).
     /// 크기 비교는 utf16.count — 246KB 텍스트에서 그래핌 순회 O(n)을 피한다.
     private static func truncateForDisplay(_ text: String) -> (text: String, truncated: Bool) {
-        let charCap = 5_000
-        let lineCap = 120
-        let lineLengthCap = 400
+        let first = truncateCore(text, charCap: 5_000, lineCap: 120)
+        // CJK 대량 콘텐츠는 폴백 사전 해석 후에도 조판이 ASCII 의 ~20배 (측정: 5,000자 한글
+        // 60ms vs ASCII 2.7ms) — 착지 블록을 소형 보드 수준으로 맞추기 위해 상한을 더 줄인다.
+        // ASCII 위주 코드/로그 프리뷰는 5,000자/120줄 그대로 (조판 수 ms, 축소 불필요).
+        guard CodeHighlighter.cjkCount(first.text) >= 800 else { return first }
+        let second = truncateCore(first.text, charCap: 2_000, lineCap: 60)
+        return (second.text, first.truncated || second.truncated)
+    }
 
+    private static func truncateCore(
+        _ text: String, charCap: Int, lineCap: Int, lineLengthCap: Int = 400
+    ) -> (text: String, truncated: Bool) {
         var truncated = false
         var working = text
         if text.utf16.count > charCap {
@@ -292,7 +306,9 @@ final class PaletteViewModel: ObservableObject {
         totalMatching = page?.total ?? results.count
         selectedIndex = 0
         secretRevealed = false
-        previewItem = selectedItem
+        // 프리뷰는 디바운스 경로로 — 리스트 프레임을 먼저 그리고 조판은 다음 프레임으로 민다
+        // (selectedIndex didSet 은 0→0 재대입 시 발화하지 않으므로 명시 호출 필요)
+        schedulePreviewUpdate()
     }
 
     /// 즉시(동기) 검색 — reset()·보드 전환 등 명시 액션 경로 전용.
@@ -304,7 +320,11 @@ final class PaletteViewModel: ObservableObject {
         fetchResults()
         selectedIndex = 0
         secretRevealed = false
-        previewItem = selectedItem // 목록 갱신 직후엔 즉시 표시
+        // 보드 전환/리셋 프레임 안에서 프리뷰를 동기 조판하지 않는다 — 착지 항목이 대형 텍스트면
+        // CTLine measure+draw 가 전환 프레임을 1.5초까지 블록 (프로파일 확정 병목).
+        // 기존 90ms 디바운스(방향키 이동과 동일 경로)로 밀어 탭·리스트를 먼저 즉시 교체한다.
+        // 연속 ⌘]/⌘[ 순환 중에는 중간 보드 프리뷰가 아예 조판되지 않는다.
+        schedulePreviewUpdate()
     }
 
     private func fetchResults() {
