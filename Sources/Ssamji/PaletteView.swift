@@ -163,7 +163,7 @@ struct PaletteView: View {
                 Text("'\(vm.boardPendingDeleteName)' 보드를 삭제할까요?\n항목들은 삭제되지 않고 히스토리에 남습니다.\n(오래된 항목은 보관 기간 정책의 적용을 받게 됩니다)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("⏎ 삭제 · esc 취소")
+                Text("Enter 삭제 · esc 취소")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -377,7 +377,7 @@ struct PaletteView: View {
                     .foregroundStyle(SsamjiColor.goldGlaze)
                 Text(item.customTitle?.isEmpty == false ? item.customTitle! : "시크릿 항목")
                     .font(.headline)
-                Text("⏎ 로 바로 붙여넣기 · ⌥ 를 누르고 있는 동안 내용 표시")
+                Text("Enter 로 바로 붙여넣기 · Option 을 누르고 있는 동안 내용 표시")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -490,12 +490,12 @@ struct PaletteView: View {
 
     private var hintBar: some View {
         HStack(spacing: 14) {
-            hint("⏎", vm.directPasteEnabled ? "붙여넣기" : "복사")
-            hint("⌘K", "스택")
+            hint("Enter", vm.directPasteEnabled ? "붙여넣기" : "복사")
+            hint("Cmd K", "스택")
             if !vm.stack.isEmpty {
                 // 숫자 카운터는 이 Text 하나에만 numericText 트랜지션 (리프 한정 — 헌법 2조)
                 HStack(spacing: 4) {
-                    Text("⌘⏎")
+                    Text("Cmd Enter")
                         .font(.caption2.monospaced())
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -507,14 +507,14 @@ struct PaletteView: View {
                         .animation(.easeOut(duration: 0.18), value: vm.stack.count)
                 }
                 // 명시적 비우기 — 키보드(⌘⇧K)와 마우스(힌트 클릭) 동일 동작
-                hint("⌘⇧K", "비우기")
+                hint("Cmd Shift K", "비우기")
                     .contentShape(Rectangle())
                     .onTapGesture { vm.clearStack() }
             }
-            hint("⌘⌫", "삭제")
+            hint("Cmd ⌫", "삭제")
             Spacer()
             // 나머지 단축키는 전부 ⌘/ 도움말로 — 상시 8개 힌트의 인지 부하 대신 발견 가능한 사전
-            hint("⌘/", "단축키")
+            hint("Cmd /", "단축키")
                 .contentShape(Rectangle())
                 .onTapGesture { vm.helpVisible = true }
         }
@@ -634,7 +634,7 @@ private struct ResultRow: View, Equatable {
                 Circle().fill(boardColor).frame(width: 6, height: 6)
             }
             if index < 9 {
-                Text("⌘\(index + 1)")
+                Text("Cmd \(index + 1)")
                     .font(.caption2.monospaced())
                     .foregroundStyle(selected ? AnyShapeStyle(SsamjiColor.accent) : AnyShapeStyle(.quaternary))
             }
@@ -761,34 +761,36 @@ private struct HelpCard: View {
             HStack(alignment: .top, spacing: 26) {
                 VStack(alignment: .leading, spacing: 14) {
                     group("실행", [
-                        ("⏎", "붙여넣기"),
-                        ("⇧⏎", "복사만"),
-                        ("⌘1–9", "바로 붙여넣기"),
-                        ("⌥ 홀드", "시크릿 내용 보기"),
+                        ("Enter", "붙여넣기"),
+                        ("Shift Enter", "복사만"),
+                        ("Cmd 1–9", "바로 붙여넣기"),
+                        ("Option 홀드", "시크릿 내용 보기"),
                     ])
                     group("스택", [
-                        ("⌘K", "담기 · 빼기"),
-                        ("⌘⏎", "스택 붙여넣기"),
-                        ("⌘⇧K", "스택 비우기"),
+                        ("Cmd K", "담기 · 빼기"),
+                        ("Cmd Enter", "스택 붙여넣기"),
+                        ("Cmd Shift K", "스택 비우기"),
                     ])
                 }
                 VStack(alignment: .leading, spacing: 14) {
                     group("정리", [
-                        ("⌘T", "변환해서 붙여넣기"),
-                        ("⌘R", "라벨 지정"),
-                        ("⌘P", "보드에 넣기"),
-                        ("⌘E", "이 앱 수집 제외"),
-                        ("⌘⌫", "삭제"),
+                        ("Cmd T", "변환해서 붙여넣기"),
+                        ("Cmd R", "라벨 지정"),
+                        ("Cmd P", "보드에 넣기"),
+                        ("Cmd E", "이 앱 수집 제외"),
+                        ("Cmd ⌫", "삭제"),
                     ])
                     group("보드", [
-                        ("⌘[ ]", "보드 넘겨보기 (이전·다음)"),
-                        ("⌘⇧←→", "보드 자리 옮기기 (순서)"),
-                        ("⌘⇧S", "시크릿 전환"),
-                        ("⌘⇧⌫", "보드 삭제"),
+                        ("Cmd [", "이전 보드 보기"),
+                        ("Cmd ]", "다음 보드 보기"),
+                        ("Cmd Shift ←", "보드를 왼쪽으로 옮기기"),
+                        ("Cmd Shift →", "보드를 오른쪽으로 옮기기"),
+                        ("Cmd Shift S", "시크릿 전환"),
+                        ("Cmd Shift ⌫", "보드 삭제"),
                     ])
                 }
             }
-            Text("⌘⇧E 은신 모드 · 아무 키나 누르면 닫힙니다")
+            Text("Cmd Shift E 은신 모드 · 아무 키나 누르면 닫힙니다")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -906,7 +908,7 @@ private struct TransformPickerCard: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("⏎ 붙여넣기 · ⇧⏎ 복사만 · esc 취소 (원본은 그대로 보존)")
+            Text("Enter 붙여넣기 · Shift Enter 복사만 · esc 취소 (원본은 그대로 보존)")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -945,7 +947,7 @@ private struct StackPickerCard: View {
                     }
                 }
             }
-            Text("⏎ 붙여넣기 · ⇧⏎ 복사만 · esc 취소 · ⌘⇧K 스택 비우기")
+            Text("Enter 붙여넣기 · Shift Enter 복사만 · esc 취소 · Cmd Shift K 스택 비우기")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -979,7 +981,7 @@ private struct BoardPickerCard: View {
                         .toggleStyle(.checkbox)
                         .font(.caption)
                 }
-                Text("⏎ 만들기 · ⌘S 시크릿 토글 · esc 취소")
+                Text("Enter 만들기 · Cmd S 시크릿 토글 · esc 취소")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -1043,7 +1045,7 @@ private struct RenameCard: View {
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .onSubmit { vm.confirmRename() }
-            Text("⏎ 저장 · esc 취소 · 비워두면 라벨 제거")
+            Text("Enter 저장 · esc 취소 · 비워두면 라벨 제거")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }

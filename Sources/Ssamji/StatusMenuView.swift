@@ -78,7 +78,7 @@ struct StatusMenuView: View {
                 permissionCard(
                     title: "손쉬운 사용 권한이 필요해요",
                     detail: "다이렉트 붙여넣기(⌘V 시뮬레이션)에 쓰입니다",
-                    help: "허용 전까지 ⏎ 는 클립보드 복사만 합니다.",
+                    help: "허용 전까지 Enter 는 클립보드 복사만 합니다.",
                     action: {
                         Permissions.requestAccessibility()
                         Permissions.openAccessibilitySettings()
@@ -94,7 +94,7 @@ struct StatusMenuView: View {
             groupCard {
                 toggleRow(
                     isOn: $state.directPasteEnabled,
-                    title: "⏎ 로 바로 붙여넣기",
+                    title: "Enter 로 바로 붙여넣기",
                     caption: "끄면 클립보드에 복사만 합니다"
                 )
                 groupSeparator
@@ -111,7 +111,7 @@ struct StatusMenuView: View {
                 toggleRow(
                     isOn: $state.stealthMode,
                     title: "은신 모드",
-                    caption: "수집만 잠시 멈춥니다 · 팔레트에서 ⌘⇧E"
+                    caption: "수집만 잠시 멈춥니다 · 팔레트에서 Cmd Shift E"
                 )
                 groupSeparator
                 VStack(alignment: .leading, spacing: 4) {
@@ -258,7 +258,7 @@ struct StatusMenuView: View {
                 .font(.caption)
 
             if state.excludedApps.isEmpty {
-                Text("제외된 앱이 없습니다 · 팔레트에서 ⌘E 로도 추가")
+                Text("제외된 앱이 없습니다 · 팔레트에서 Cmd E 로도 추가")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             } else {

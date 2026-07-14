@@ -1,58 +1,66 @@
 import AppKit
 
-/// 메뉴바용 복주머니 템플릿 아이콘 — scripts/make-icon.swift 의 실루엣과 동일한 경로 (수정 시 함께 갱신)
+/// 메뉴바용 복주머니 템플릿 아이콘 — 라인(윤곽선) 스타일.
+/// 채움 실루엣은 18px 에서 '흰 덩어리'로 뭉개져서, 열린 원호 + 목 + 끈 + 세 가닥 주름의
+/// 스트로크 드로잉으로 재설계 (2026-07-15). 레티나(@2x=36px)에서 특히 또렷하다.
 @MainActor
 enum MenuBarIcon {
     static let image: NSImage = make(cinched: false)
 
-    /// 은신 모드: 입구를 바짝 '여민' 변형 — 목·주름·끈을 중심으로 모아
-    /// 수집이 멈췄음을 실루엣만으로 말한다 (v1.1 "쌈지를 여미다")
+    /// 은신 모드: 입구를 바짝 '여민' 변형 — 상단부(목·끈·주름)를 중심으로 모은다
     static let stealthImage: NSImage = make(cinched: true)
 
     private static func make(cinched: Bool) -> NSImage {
-        // 여밈 정도: 입구 쪽(목/주름/끈) x 좌표를 중심(512)으로 모은다
+        // 여밈 정도: 상단부 x 좌표를 중심(512)으로 모은다
         let squeeze: CGFloat = cinched ? 0.55 : 1.0
         func sx(_ x: CGFloat) -> CGFloat { 512 + (x - 512) * squeeze }
 
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let scale = rect.width / 1024
-            ctx.scaleBy(x: scale, y: scale)
+            ctx.scaleBy(x: rect.width / 1024, y: rect.height / 1024)
 
-            let path = CGMutablePath()
-            // 몸통 (여며도 몸통은 그대로 — 보관물은 안전하다)
-            path.addEllipse(in: CGRect(x: 240, y: 128, width: 544, height: 512))
-            // 목 연결부
-            path.move(to: CGPoint(x: sx(424), y: 590))
-            path.addLine(to: CGPoint(x: sx(600), y: 590))
-            path.addLine(to: CGPoint(x: sx(586), y: 700))
-            path.addLine(to: CGPoint(x: sx(438), y: 700))
-            path.closeSubpath()
-            // 입구 주름
-            path.move(to: CGPoint(x: sx(438), y: 690))
-            path.addQuadCurve(to: CGPoint(x: sx(356), y: 862), control: CGPoint(x: sx(366), y: 742))
-            path.addQuadCurve(to: CGPoint(x: sx(472), y: 796), control: CGPoint(x: sx(426), y: 816))
-            path.addQuadCurve(to: CGPoint(x: sx(512), y: 878), control: CGPoint(x: sx(498), y: 844))
-            path.addQuadCurve(to: CGPoint(x: sx(552), y: 796), control: CGPoint(x: sx(526), y: 844))
-            path.addQuadCurve(to: CGPoint(x: sx(668), y: 862), control: CGPoint(x: sx(598), y: 816))
-            path.addQuadCurve(to: CGPoint(x: sx(586), y: 690), control: CGPoint(x: sx(658), y: 742))
-            path.closeSubpath()
+            ctx.setStrokeColor(NSColor.black.cgColor)
+            ctx.setLineWidth(104)
+            ctx.setLineCap(.round)
+            ctx.setLineJoin(.round)
 
-            ctx.addPath(path)
-            ctx.setFillColor(NSColor.black.cgColor)
-            ctx.fillPath()
+            // 몸통: 목 양끝에서 아래로 감아 도는 열린 원호
+            let center = CGPoint(x: 512, y: 350)
+            let radius: CGFloat = 282
+            let startAngle: CGFloat = 58 * .pi / 180
+            let endAngle: CGFloat = 122 * .pi / 180
+            ctx.addArc(center: center, radius: radius,
+                       startAngle: startAngle, endAngle: endAngle,
+                       clockwise: true)
+            ctx.strokePath()
 
-            // 끈 밴드는 펀치아웃으로 표현 (템플릿은 단색이라 구멍이 곧 디테일)
-            ctx.setBlendMode(.destinationOut)
-            // 18px 에서도 끈이 읽히도록 펀치아웃을 크게 — 구멍이 곧 실루엣의 디테일
-            let bandWidth = 296 * squeeze
-            let corner = min(52, bandWidth / 2)
-            let band = CGPath(
-                roundedRect: CGRect(x: 512 - bandWidth / 2, y: 586, width: bandWidth, height: 108),
-                cornerWidth: corner, cornerHeight: corner, transform: nil
-            )
-            ctx.addPath(band)
-            ctx.fillPath()
+            // 목: 원호 끝에서 안쪽 위로 모이는 두 선
+            let leftArcEnd = CGPoint(x: center.x + radius * cos(endAngle),
+                                     y: center.y + radius * sin(endAngle))
+            let rightArcEnd = CGPoint(x: center.x + radius * cos(startAngle),
+                                      y: center.y + radius * sin(startAngle))
+            ctx.move(to: leftArcEnd)
+            ctx.addLine(to: CGPoint(x: sx(468), y: 702))
+            ctx.strokePath()
+            ctx.move(to: rightArcEnd)
+            ctx.addLine(to: CGPoint(x: sx(556), y: 702))
+            ctx.strokePath()
+
+            // 끈: 목을 가로지르는 매듭선
+            ctx.move(to: CGPoint(x: sx(420), y: 716))
+            ctx.addLine(to: CGPoint(x: sx(604), y: 716))
+            ctx.strokePath()
+
+            // 입구 주름: 세 가닥 살 (지그재그는 소형에서 뭉개짐 — 부챗살이 읽힌다)
+            ctx.move(to: CGPoint(x: sx(470), y: 748))
+            ctx.addLine(to: CGPoint(x: sx(424), y: 880))
+            ctx.strokePath()
+            ctx.move(to: CGPoint(x: 512, y: 754))
+            ctx.addLine(to: CGPoint(x: 512, y: 908))
+            ctx.strokePath()
+            ctx.move(to: CGPoint(x: sx(554), y: 748))
+            ctx.addLine(to: CGPoint(x: sx(600), y: 880))
+            ctx.strokePath()
 
             return true
         }
