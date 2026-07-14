@@ -139,12 +139,12 @@ struct PaletteView: View {
     private var boardDeleteOverlay: some View {
         ZStack {
             Color.black.opacity(0.25)
-                .onTapGesture { vm.confirmingBoardDelete = false }
+                .onTapGesture { vm.cancelBoardDelete() }
             VStack(alignment: .leading, spacing: 10) {
                 // 파괴 액션 카드 — 세로 캡슐·테두리를 danger(단청 주홍)로
                 SsamjiCardTitle(text: "보드 삭제", tint: SsamjiColor.danger)
                     .foregroundStyle(SsamjiColor.danger)
-                Text("'\(vm.selectedBoard?.name ?? "")' 보드를 삭제할까요?\n항목들은 삭제되지 않고 히스토리에 남습니다.")
+                Text("'\(vm.boardPendingDeleteName)' 보드를 삭제할까요?\n항목들은 삭제되지 않고 히스토리에 남습니다.\n(오래된 항목은 보관 기간 정책의 적용을 받게 됩니다)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("⏎ 삭제 · esc 취소")
@@ -193,7 +193,8 @@ struct PaletteView: View {
                         Button("오른쪽으로 이동 →") { vm.moveBoard(board, by: 1) }
                             .disabled(vm.boards.last?.id == board.id)
                         Divider()
-                        Button("보드 삭제", role: .destructive) { vm.deleteBoard(board) }
+                        // 즉발 삭제 금지 — ⌘⇧⌫ 와 동일한 확인 카드를 거친다 (인시던트 재발 방지)
+                        Button("보드 삭제…", role: .destructive) { vm.requestDeleteBoard(board) }
                     }
                 }
             }

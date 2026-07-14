@@ -424,17 +424,37 @@ final class PaletteViewModel: ObservableObject {
         reload(selecting: selectedItem?.uuid)
     }
 
-    // MARK: - 보드 삭제 (⌘⇧⌫, 확인 후 실행)
+    // MARK: - 보드 삭제 (⌘⇧⌫·우클릭 공통 — 반드시 확인 후 실행)
+    // 우클릭 즉발 삭제로 보드가 날아간 인시던트(2026-07-14 QA) 재발 방지:
+    // 모든 삭제 진입점이 이 확인 플로우를 거친다.
+
+    /// 확인창이 겨냥하는 보드 (우클릭은 selectedBoard 가 아닐 수 있다)
+    private(set) var boardPendingDelete: Board?
+
+    var boardPendingDeleteName: String {
+        (boardPendingDelete ?? selectedBoard)?.name ?? ""
+    }
 
     func requestDeleteCurrentBoard() {
-        guard selectedBoard != nil else { return }
+        guard let board = selectedBoard else { return }
+        requestDeleteBoard(board)
+    }
+
+    func requestDeleteBoard(_ board: Board) {
+        boardPendingDelete = board
         confirmingBoardDelete = true
     }
 
     func confirmDeleteCurrentBoard() {
-        if let board = selectedBoard {
+        if let board = boardPendingDelete ?? selectedBoard {
             deleteBoard(board)
         }
+        boardPendingDelete = nil
+        confirmingBoardDelete = false
+    }
+
+    func cancelBoardDelete() {
+        boardPendingDelete = nil
         confirmingBoardDelete = false
     }
 

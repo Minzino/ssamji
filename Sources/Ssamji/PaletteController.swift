@@ -221,7 +221,7 @@ final class PaletteController {
                 viewModel.confirmDeleteCurrentBoard()
                 return true
             case 53:
-                viewModel.confirmingBoardDelete = false
+                viewModel.cancelBoardDelete()
                 return true
             default:
                 return true
