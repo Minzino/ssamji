@@ -261,6 +261,12 @@ final class PaletteViewModel: ObservableObject {
         stackPickerVisible = false
         confirmingBoardDelete = false
         helpVisible = false
+        // 오버레이를 연 채 팔레트를 닫았다 재오픈해도 깨끗하게 시작
+        pickerVisible = false
+        creatingBoard = false
+        creatingBoardStandalone = false
+        renameVisible = false
+        transformVisible = false
         search()
     }
 
@@ -642,9 +648,10 @@ final class PaletteViewModel: ObservableObject {
     }
 
     func closePicker() {
+        // creatingBoard/Standalone 은 여기서 되돌리지 않는다 — 닫힘 페이드(0.14s) 동안
+        // 카드가 '보드에 넣기' 리스트 모드로 재렌더되며 깜빡이는 것 방지.
+        // 다음 openPicker()/openBoardCreate() 가 초기화한다.
         pickerVisible = false
-        creatingBoard = false
-        creatingBoardStandalone = false
     }
 
     func pickerMove(by delta: Int) {

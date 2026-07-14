@@ -984,10 +984,13 @@ private struct BoardPickerCard: View {
                         optionRow(option, index: index)
                     }
                 }
+            } else if !vm.boards.isEmpty {
+                // 중복 이름을 피할 수 있게 기존 보드를 참고로 보여준다 (선택은 Cmd P 의 역할)
+                boardReferenceList
             }
 
             if vm.creatingBoard {
-                if !vm.creatingBoardStandalone {
+                if !vm.creatingBoardStandalone || !vm.boards.isEmpty {
                     Divider()
                 }
                 HStack(spacing: 8) {
@@ -1016,6 +1019,35 @@ private struct BoardPickerCard: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { nameFocused = true }
             }
         }
+    }
+
+    /// Cmd N 독립 생성 모드의 기존 보드 참고 목록 — 흐리게, 상호작용 없음
+    private var boardReferenceList: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("지금 있는 보드")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            ForEach(vm.boards.prefix(6)) { board in
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color(hex: board.colorHex) ?? .gray)
+                        .frame(width: 8, height: 8)
+                    if board.isSecret {
+                        Image(systemName: "lock.fill").font(.system(size: 9))
+                    }
+                    Text(board.name)
+                        .lineLimit(1)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            }
+            if vm.boards.count > 6 {
+                Text("외 \(vm.boards.count - 6)개")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 8)
     }
 
     private func optionRow(_ option: PaletteViewModel.PickerOption, index: Int) -> some View {
