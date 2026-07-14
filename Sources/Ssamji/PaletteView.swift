@@ -489,9 +489,20 @@ struct PaletteView: View {
     // MARK: - 힌트 바
 
     private var hintBar: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             hint("Enter", vm.directPasteEnabled ? "붙여넣기" : "복사")
             hint("Cmd K", "스택")
+            if vm.stack.isEmpty {
+                // 보드 힌트는 스택이 비었을 때만 — 스택이 차면 아래 스택 블록이 자리를 대신한다
+                hint("Cmd P", "보드 담기")
+                    .contentShape(Rectangle())
+                    .onTapGesture { vm.openPicker() }
+                hint("Cmd N", "새 보드")
+                    .contentShape(Rectangle())
+                    .onTapGesture { vm.openBoardCreate() }
+                hint("Cmd [", "이전 보드")
+                hint("Cmd ]", "다음 보드")
+            }
             if !vm.stack.isEmpty {
                 // 숫자 카운터는 이 Text 하나에만 numericText 트랜지션 (리프 한정 — 헌법 2조)
                 HStack(spacing: 4) {
@@ -511,7 +522,6 @@ struct PaletteView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { vm.clearStack() }
             }
-            hint("Cmd ⌫", "삭제")
             Spacer()
             // 나머지 단축키는 전부 ⌘/ 도움말로 — 상시 8개 힌트의 인지 부하 대신 발견 가능한 사전
             hint("Cmd /", "단축키")
@@ -533,6 +543,8 @@ struct PaletteView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+        // 키캡·라벨이 좁을 때 두 줄로 꺾이는 것 방지 — 힌트는 항상 한 줄
+        .fixedSize()
     }
 }
 
@@ -776,11 +788,12 @@ private struct HelpCard: View {
                     group("정리", [
                         ("Cmd T", "변환해서 붙여넣기"),
                         ("Cmd R", "라벨 지정"),
-                        ("Cmd P", "보드에 넣기"),
                         ("Cmd E", "이 앱 수집 제외"),
                         ("Cmd ⌫", "삭제"),
                     ])
                     group("보드", [
+                        ("Cmd N", "새 보드 만들기"),
+                        ("Cmd P", "선택 항목을 보드에 담기"),
                         ("Cmd [", "이전 보드 보기"),
                         ("Cmd ]", "다음 보드 보기"),
                         ("Cmd Shift ←", "보드를 왼쪽으로 옮기기"),
@@ -962,16 +975,21 @@ private struct BoardPickerCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SsamjiCardTitle(text: "보드에 넣기")
+            // Cmd N 독립 생성은 배정 리스트 없이 이름 입력만 — 제목도 행동에 맞춘다
+            SsamjiCardTitle(text: vm.creatingBoardStandalone ? "새 보드 만들기" : "보드에 넣기")
 
-            VStack(spacing: 2) {
-                ForEach(Array(vm.pickerOptions.enumerated()), id: \.offset) { index, option in
-                    optionRow(option, index: index)
+            if !vm.creatingBoardStandalone {
+                VStack(spacing: 2) {
+                    ForEach(Array(vm.pickerOptions.enumerated()), id: \.offset) { index, option in
+                        optionRow(option, index: index)
+                    }
                 }
             }
 
             if vm.creatingBoard {
-                Divider()
+                if !vm.creatingBoardStandalone {
+                    Divider()
+                }
                 HStack(spacing: 8) {
                     TextField("새 보드 이름", text: $vm.newBoardName)
                         .textFieldStyle(.roundedBorder)
@@ -989,6 +1007,12 @@ private struct BoardPickerCard: View {
         .ssamjiCard(width: 300)
         .onChange(of: vm.creatingBoard) { _, creating in
             if creating {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { nameFocused = true }
+            }
+        }
+        // Cmd N 은 creatingBoard=true 인 채로 카드가 등장하므로 onChange 가 안 탄다
+        .onAppear {
+            if vm.creatingBoard {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { nameFocused = true }
             }
         }

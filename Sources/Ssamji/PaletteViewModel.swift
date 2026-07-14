@@ -147,6 +147,8 @@ final class PaletteViewModel: ObservableObject {
     @Published var pickerVisible = false
     @Published var pickerIndex = 0
     @Published var creatingBoard = false
+    /// Cmd N 독립 생성 모드 — 만들어도 선택 항목을 배정하지 않는다
+    private(set) var creatingBoardStandalone = false
     @Published var newBoardName = ""
     @Published var newBoardSecret = false
 
@@ -623,6 +625,17 @@ final class PaletteViewModel: ObservableObject {
         guard selectedItem != nil else { return }
         pickerIndex = 0
         creatingBoard = false
+        creatingBoardStandalone = false
+        newBoardName = ""
+        newBoardSecret = false
+        pickerVisible = true
+    }
+
+    /// Cmd N — 항목 배정 없이 보드만 만든다 (픽커를 이름 입력 단계로 바로 연다)
+    func openBoardCreate() {
+        pickerIndex = 0
+        creatingBoard = true
+        creatingBoardStandalone = true
         newBoardName = ""
         newBoardSecret = false
         pickerVisible = true
@@ -631,6 +644,7 @@ final class PaletteViewModel: ObservableObject {
     func closePicker() {
         pickerVisible = false
         creatingBoard = false
+        creatingBoardStandalone = false
     }
 
     func pickerMove(by delta: Int) {
@@ -665,7 +679,7 @@ final class PaletteViewModel: ObservableObject {
             closePicker()
             return
         }
-        if let item = selectedItem {
+        if let item = selectedItem, !creatingBoardStandalone {
             assign(item, to: board.id)
         } else {
             closePicker()

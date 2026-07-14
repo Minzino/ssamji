@@ -7,8 +7,11 @@ import UniformTypeIdentifiers
 /// 시그니처: 금사 매듭 디바이더 — 아이콘의 금사 끈과 호응.
 struct StatusMenuView: View {
     @EnvironmentObject private var state: AppState
+    // 낙관적 초깃값 — false 로 시작하면 첫 렌더에 권한 카드가 포함된 큰 높이로
+    // 창이 만들어졌다가 확인 후 콘텐츠만 줄어 위아래 여백이 남는다.
+    // refreshPermissions() 가 즉시 실제 값으로 바로잡는다.
     @State private var pasteboard: Permissions.Status = .systemDefault
-    @State private var accessibility = false
+    @State private var accessibility = true
     @State private var draftRetention: Double = 91
 
     /// 드래그 중엔 드래프트 값, 평소엔 확정 값 표시
@@ -178,7 +181,12 @@ struct StatusMenuView: View {
         // .fixedSize 만으로는 이미 커져 버린 패널이 줄어들지 않아(콘텐츠만 중앙 정렬됨)
         // 창 프레임을 fitting 크기로 직접 되맞추는 sizer 를 배경에 심는다.
         .fixedSize(horizontal: false, vertical: true)
-        .background(MenuBarWindowSizer())
+        // GeometryReader 가 콘텐츠의 '실제 배치 크기'를 재서 창에 강제한다 —
+        // hosting view 의 fittingSize 는 이상적 크기가 아니라 현재 크기를
+        // 돌려주는 경우가 있어(838 고착 재발) 신뢰할 수 없다.
+        .background(GeometryReader { geo in
+            MenuBarWindowSizer(target: geo.size)
+        })
         // 설정창 전체 일괄 청자화 — 토글·버튼·슬라이더가 한 물감이 된다
         .tint(SsamjiColor.accent)
         .onAppear {
@@ -358,13 +366,24 @@ private struct ThreadDivider: View {
 /// 위아래 투명 여백이 생김) 창 프레임을 직접 수정한다. 상단 모서리를 고정해
 /// 메뉴바에 붙은 채 아래로만 늘고 준다.
 private struct MenuBarWindowSizer: NSViewRepresentable {
-    func makeNSView(context: Context) -> SizerView { SizerView() }
-    func updateNSView(_ view: SizerView, context: Context) { view.syncSoon() }
+    /// GeometryReader 가 잰 콘텐츠(패딩 포함)의 실제 배치 크기
+    let target: CGSize
 
-    /// 1회성 async 는 창 부착 전에 실행되면 영영 못 맞춘다(첫 렌더에 권한 카드가
-    /// 포함돼 크게 열렸다가 카드가 사라지는 경우 등) — 창 부착·레이아웃 패스마다
-    /// 재시도해 콘텐츠 크기로 수렴시킨다.
+    func makeNSView(context: Context) -> SizerView {
+        let view = SizerView()
+        view.target = target
+        return view
+    }
+
+    func updateNSView(_ view: SizerView, context: Context) {
+        view.target = target
+        view.syncSoon()
+    }
+
+    /// 창 부착·레이아웃 패스마다 target 크기로 재수렴 — 1회성 async 는 창 부착 전에
+    /// 실행되면 영영 못 맞추고, 권한 카드가 사라지는 등 콘텐츠가 줄어드는 경우도 쫓아간다.
     final class SizerView: NSView {
+        var target: CGSize = .zero
         private var pending = false
 
         override func viewDidMoveToWindow() {
@@ -387,13 +406,11 @@ private struct MenuBarWindowSizer: NSViewRepresentable {
         }
 
         private func sync() {
-            guard let window, let content = window.contentView else { return }
-            let fit = content.fittingSize
-            guard fit.height > 1, fit.width > 1 else { return }
+            guard let window, target.height > 1, target.width > 1 else { return }
             var frame = window.frame
-            guard abs(frame.height - fit.height) > 1 || abs(frame.width - fit.width) > 1 else { return }
-            frame.origin.y += frame.height - fit.height // 상단 고정
-            frame.size = fit
+            guard abs(frame.height - target.height) > 1 || abs(frame.width - target.width) > 1 else { return }
+            frame.origin.y += frame.height - target.height // 상단 고정
+            frame.size = target
             window.setFrame(frame, display: true)
         }
     }

@@ -316,6 +316,9 @@ final class PaletteController {
         case 35 where cmd: // ⌘P: 보드에 넣기
             viewModel.openPicker()
             return true
+        case 45 where cmd: // ⌘N: 새 보드 만들기 (배정 없이 생성만)
+            viewModel.openBoardCreate()
+            return true
         case 15 where cmd: // ⌘R: 라벨 지정
             viewModel.openRename()
             return true
@@ -387,7 +390,12 @@ final class PaletteController {
         // 새 보드 이름 입력 중에는 esc 만 가로채고 나머지는 TextField 에 넘긴다 (⏎ 은 onSubmit 처리)
         if viewModel.creatingBoard {
             if event.keyCode == 53 {
-                viewModel.creatingBoard = false
+                if viewModel.creatingBoardStandalone {
+                    // ⌘N 독립 생성은 뒤에 배정 리스트가 없다 — esc 로 픽커째 닫는다
+                    viewModel.closePicker()
+                } else {
+                    viewModel.creatingBoard = false
+                }
                 return true
             }
             return false
