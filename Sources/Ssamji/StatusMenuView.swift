@@ -174,8 +174,11 @@ struct StatusMenuView: View {
         .padding(14)
         .frame(width: 320)
         // 창 높이를 콘텐츠에 강제 고정 — MenuBarExtra 창이 이전(더 길던) 레이아웃의
-        // 높이를 기억해 상단에 큰 공백이 남는 것 방지
+        // 높이를 기억해 상단에 큰 공백이 남는 것 방지.
+        // .fixedSize 만으로는 이미 커져 버린 패널이 줄어들지 않아(콘텐츠만 중앙 정렬됨)
+        // 창 프레임을 fitting 크기로 직접 되맞추는 sizer 를 배경에 심는다.
         .fixedSize(horizontal: false, vertical: true)
+        .background(MenuBarWindowSizer())
         // 설정창 전체 일괄 청자화 — 토글·버튼·슬라이더가 한 물감이 된다
         .tint(SsamjiColor.accent)
         .onAppear {
@@ -347,5 +350,32 @@ private struct ThreadDivider: View {
             .fill(.quaternary)
             .frame(height: 1)
             .frame(maxWidth: .infinity)
+    }
+}
+
+/// MenuBarExtra(.window) 패널을 SwiftUI 콘텐츠의 fitting 크기로 되맞추는 sizer.
+/// 패널은 한번 커지면 콘텐츠가 줄어도 스스로 줄지 않으므로(콘텐츠만 중앙 정렬돼
+/// 위아래 투명 여백이 생김) 창 프레임을 직접 수정한다. 상단 모서리를 고정해
+/// 메뉴바에 붙은 채 아래로만 늘고 준다.
+private struct MenuBarWindowSizer: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { Self.sync(view) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { Self.sync(view) }
+    }
+
+    private static func sync(_ view: NSView) {
+        guard let window = view.window, let content = window.contentView else { return }
+        let fit = content.fittingSize
+        guard fit.height > 1, fit.width > 1 else { return }
+        var frame = window.frame
+        guard abs(frame.height - fit.height) > 1 || abs(frame.width - fit.width) > 1 else { return }
+        frame.origin.y += frame.height - fit.height // 상단 고정
+        frame.size = fit
+        window.setFrame(frame, display: true)
     }
 }

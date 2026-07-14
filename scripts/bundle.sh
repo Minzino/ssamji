@@ -48,3 +48,11 @@ echo "✅ 번들 완료: $APP"
 # /Applications 에 정식 설치
 ditto "$APP" "/Applications/쌈지.app"
 echo "✅ 설치 완료: /Applications/쌈지.app"
+
+# 새 빌드로 재시작 — 프로세스 이름은 앱 표시명(쌈지)이 아니라 실행 파일명(Ssamji)
+if pgrep -x Ssamji > /dev/null; then
+    killall Ssamji
+    sleep 1
+fi
+open "/Applications/쌈지.app"
+echo "✅ 재시작 완료"
