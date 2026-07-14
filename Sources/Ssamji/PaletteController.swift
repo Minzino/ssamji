@@ -116,6 +116,12 @@ final class PaletteController {
         // 등장 모션(CABasicAnimation)을 걸 레이어 확보 — NSHostingView 가 이미 레이어 backing
         // 이지만 명시해 둔다 (레이어가 없으면 모션만 조용히 생략되고 페이드는 유지)
         hosting.wantsLayer = true
+        // 레이어 자체를 라운드 마스킹 — SwiftUI 도형 라운드에만 의존하면 잦은 재그리기
+        // (검색 타이핑 등) 때 윈도우 그림자/불투명 영역이 사각 레이어 기준으로 재계산되어
+        // 모서리가 직각으로 보이는 아티팩트가 생긴다 (2026-07-15 사용자 보고)
+        hosting.layer?.cornerRadius = 14
+        hosting.layer?.cornerCurve = .continuous
+        hosting.layer?.masksToBounds = true
         let p = PalettePanel(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 440),
             styleMask: [.borderless, .nonactivatingPanel],
