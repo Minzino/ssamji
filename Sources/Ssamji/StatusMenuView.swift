@@ -358,24 +358,43 @@ private struct ThreadDivider: View {
 /// 위아래 투명 여백이 생김) 창 프레임을 직접 수정한다. 상단 모서리를 고정해
 /// 메뉴바에 붙은 채 아래로만 늘고 준다.
 private struct MenuBarWindowSizer: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async { Self.sync(view) }
-        return view
-    }
+    func makeNSView(context: Context) -> SizerView { SizerView() }
+    func updateNSView(_ view: SizerView, context: Context) { view.syncSoon() }
 
-    func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async { Self.sync(view) }
-    }
+    /// 1회성 async 는 창 부착 전에 실행되면 영영 못 맞춘다(첫 렌더에 권한 카드가
+    /// 포함돼 크게 열렸다가 카드가 사라지는 경우 등) — 창 부착·레이아웃 패스마다
+    /// 재시도해 콘텐츠 크기로 수렴시킨다.
+    final class SizerView: NSView {
+        private var pending = false
 
-    private static func sync(_ view: NSView) {
-        guard let window = view.window, let content = window.contentView else { return }
-        let fit = content.fittingSize
-        guard fit.height > 1, fit.width > 1 else { return }
-        var frame = window.frame
-        guard abs(frame.height - fit.height) > 1 || abs(frame.width - fit.width) > 1 else { return }
-        frame.origin.y += frame.height - fit.height // 상단 고정
-        frame.size = fit
-        window.setFrame(frame, display: true)
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            syncSoon()
+        }
+
+        override func layout() {
+            super.layout()
+            syncSoon()
+        }
+
+        func syncSoon() {
+            guard !pending else { return }
+            pending = true
+            DispatchQueue.main.async { [weak self] in
+                self?.pending = false
+                self?.sync()
+            }
+        }
+
+        private func sync() {
+            guard let window, let content = window.contentView else { return }
+            let fit = content.fittingSize
+            guard fit.height > 1, fit.width > 1 else { return }
+            var frame = window.frame
+            guard abs(frame.height - fit.height) > 1 || abs(frame.width - fit.width) > 1 else { return }
+            frame.origin.y += frame.height - fit.height // 상단 고정
+            frame.size = fit
+            window.setFrame(frame, display: true)
+        }
     }
 }
