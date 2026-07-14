@@ -186,9 +186,9 @@ final class PaletteController {
         if optionHeld,
            let item = viewModel.selectedItem,
            viewModel.isMasked(item) {
-            viewModel.secretRevealed = true
+            viewModel.setReveal(true) // 봉인 항목이면 내부에서 Touch ID 세션을 연다
         } else if !optionHeld, viewModel.secretRevealed {
-            viewModel.secretRevealed = false
+            viewModel.setReveal(false)
         }
     }
 

@@ -185,3 +185,8 @@
 "가져오는 중…" = "Importing…";
 "가져온 보드" = "Imported board";
 "가져옴 %d · 병합 %d · 실패 %d · 보드 %d개 생성" = "Imported %d · merged %d · failed %d · created %d boards";
+
+/* Vault (secret board encryption) */
+"시크릿 내용을 보기 위해 인증합니다" = "authenticate to reveal secret content";
+"시크릿 항목을 붙여넣기 위해 인증합니다" = "authenticate to paste a secret item";
+"인증되지 않아 취소했어요" = "Canceled — authentication failed";

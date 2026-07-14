@@ -39,6 +39,10 @@ struct ClipItem: Codable, Identifiable, Equatable, FetchableRecord, MutablePersi
     var boardId: Int64?
     /// 사용자가 붙인 라벨 (시크릿 항목 식별용, 일반 항목도 가능)
     var customTitle: String?
+    /// 시크릿 금고: true 면 내용 컬럼(title/text/url/colorHex/fileURLs)이 비워지고
+    /// vaultPayload(AES-GCM)에 봉인돼 있다. 이미지는 블롭 파일 자체가 암호화된다.
+    var isEncrypted: Bool = false
+    var vaultPayload: Data?
 
     /// 표시용 제목: 라벨이 있으면 라벨, 없으면 자동 생성 제목
     var displayTitle: String {

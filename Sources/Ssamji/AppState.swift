@@ -161,6 +161,33 @@ final class AppState: ObservableObject {
         if CommandLine.arguments.contains("--import-paste") {
             runPasteImport()
         }
+        // 검증용 CLI 플래그: 금고 암복호 왕복 자가 검증 (내용은 출력하지 않는다)
+        if CommandLine.arguments.contains("--vault-selftest") {
+            runVaultSelftest()
+            exit(0)
+        }
+    }
+
+    /// 봉인된 항목 전수에 대해 메모리 복호 왕복을 검증 — 성공/실패 수만 출력.
+    private func runVaultSelftest() {
+        guard let store else { print("vault-selftest: store 없음"); return }
+        do {
+            let sealed = try store.allEncryptedItems()
+            var ok = 0, failed = 0
+            for item in sealed {
+                if let plain = try? store.decryptedCopy(of: item).item,
+                   !plain.title.isEmpty || plain.text != nil || plain.url != nil
+                        || plain.colorHex != nil || plain.fileURLs != nil {
+                    ok += 1
+                } else {
+                    failed += 1
+                    print("vault-selftest: 복호 실패 id=\(String(describing: item.id))")
+                }
+            }
+            print("vault-selftest: 봉인 \(sealed.count)개 — 왕복 성공 \(ok), 실패 \(failed)")
+        } catch {
+            print("vault-selftest: 오류 \(error)")
+        }
     }
 
     // MARK: - Paste 2 이주
@@ -326,6 +353,26 @@ final class AppState: ObservableObject {
     // MARK: - 선택 확정: 클립보드로 복사 + (기본) 이전 앱에 다이렉트 페이스트
 
     private func commit(_ item: ClipItem, action: PaletteViewModel.CommitAction) {
+        // 봉인(시크릿) 항목은 Touch ID 세션을 연 뒤 메모리 복호본으로 진행 — 디스크는 봉인 유지
+        if item.isEncrypted {
+            Task { @MainActor in
+                guard await Vault.shared.unlockSession(
+                    reason: L("시크릿 항목을 붙여넣기 위해 인증합니다")),
+                    let store,
+                    let plain = try? store.decryptedCopy(of: item) else {
+                    FeedbackHUD.shared.failure(L("인증되지 않아 취소했어요"))
+                    return
+                }
+                performCommit(plain.item, action: action, imageData: plain.imageData)
+            }
+            return
+        }
+        performCommit(item, action: action, imageData: nil)
+    }
+
+    private func performCommit(
+        _ item: ClipItem, action: PaletteViewModel.CommitAction, imageData: Data?
+    ) {
         // 팔레트에서 다른 항목을 커밋하면 클립보드 주도권이 넘어간다 — 순차 모드 조용히 해제
         cancelSequential()
         // 커밋 경로: 애니메이션 생략 즉시 orderOut — 합성 ⌘V 전에 패널이 완전히 사라져야 한다
@@ -333,7 +380,7 @@ final class AppState: ObservableObject {
         let wantsPaste = action == .paste && directPasteEnabled
         // 복원 스냅샷은 우리가 클립보드를 건드리기 전에 떠 둔다
         let snapshot = (wantsPaste && restoreClipboardEnabled) ? snapshotPasteboard() : nil
-        guard writeToPasteboard(item) else {
+        guard writeToPasteboard(item, imageData: imageData) else {
             // 불소비 원칙: 준비 실패 시 기존 클립보드는 그대로 — 침묵하지 않고 알린다
             FeedbackHUD.shared.failure(L("클립보드 준비 실패 — 원본을 읽을 수 없어요"))
             return
@@ -389,7 +436,8 @@ final class AppState: ObservableObject {
     /// 불소비 원칙: 새 내용 준비가 성공한 뒤에만 기존 클립보드를 교체한다.
     /// 이미지 파일 소실 등으로 준비가 실패하면 기존 내용을 건드리지 않고 false 를 돌려준다
     /// (예전엔 clearContents() 를 먼저 불러 들고 있던 클립보드까지 증발했다).
-    private func writeToPasteboard(_ item: ClipItem) -> Bool {
+    /// imageData: 봉인 항목의 메모리 복호본 — 있으면 디스크(암호문) 대신 이걸 쓴다
+    private func writeToPasteboard(_ item: ClipItem, imageData: Data? = nil) -> Bool {
         let pb = NSPasteboard.general
         switch item.kind {
         case .text, .color:
@@ -401,9 +449,9 @@ final class AppState: ObservableObject {
             pb.clearContents()
             pb.setString(item.url ?? item.text ?? "", forType: .string)
         case .image:
-            guard let path = item.imagePath,
-                  let data = try? Data(contentsOf: URL(fileURLWithPath: path))
-            else { return false }
+            guard let data = imageData ?? item.imagePath.flatMap({
+                try? Data(contentsOf: URL(fileURLWithPath: $0))
+            }) else { return false }
             watcher.ignoreNextChange = true
             pb.clearContents()
             pb.setData(data, forType: .png)

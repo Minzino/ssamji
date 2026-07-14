@@ -254,6 +254,32 @@ final class PaletteViewModel: ObservableObject {
         board(for: item)?.isSecret == true
     }
 
+    /// ⌥ 피킹/'내용 표시'의 단일 진입점 — 봉인(암호화) 항목은 Touch ID 세션을 먼저 연다.
+    /// 공개 시 프리뷰를 메모리 복호본으로 바꿔치기하고, 해제 시 원래(봉인) 항목으로 되돌린다.
+    func setReveal(_ on: Bool) {
+        guard on else {
+            if secretRevealed {
+                secretRevealed = false
+                schedulePreviewUpdate()
+            }
+            return
+        }
+        guard !secretRevealed, let item = selectedItem else { return }
+        guard item.isEncrypted else {
+            secretRevealed = true
+            return
+        }
+        Task { @MainActor in
+            guard await Vault.shared.unlockSession(
+                reason: L("시크릿 내용을 보기 위해 인증합니다")) else { return }
+            // 인증하는 사이 선택이 옮겨졌으면 무시
+            guard selectedItem?.id == item.id,
+                  let plain = try? store.decryptedCopy(of: item).item else { return }
+            secretRevealed = true
+            previewItem = plain
+        }
+    }
+
     func reset() {
         reloadBoards()
         query = ""
@@ -528,7 +554,29 @@ final class PaletteViewModel: ObservableObject {
             return
         }
         let option = Self.stackCommitOptions[stackPickerIndex]
-        let texts = stack.compactMap(stackText(for:))
+        // 봉인(시크릿) 항목이 섞여 있으면 Touch ID 세션을 먼저 연다
+        if stack.contains(where: { $0.isEncrypted }) {
+            Task { @MainActor in
+                guard await Vault.shared.unlockSession(
+                    reason: L("시크릿 항목을 붙여넣기 위해 인증합니다")) else {
+                    FeedbackHUD.shared.failure(L("인증되지 않아 취소했어요"))
+                    return
+                }
+                finishStackCommit(option: option, action: action)
+            }
+            return
+        }
+        finishStackCommit(option: option, action: action)
+    }
+
+    private func finishStackCommit(option: StackCommitOption, action: CommitAction) {
+        let source = stack.map { item -> ClipItem in
+            guard item.isEncrypted, let plain = try? store.decryptedCopy(of: item).item else {
+                return item
+            }
+            return plain
+        }
+        let texts = source.compactMap(stackText(for:))
         guard !texts.isEmpty else {
             closeStackPicker()
             return
