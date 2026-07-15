@@ -19,6 +19,7 @@ final class SyncEngine: ObservableObject {
     private nonisolated static let enabledKey = "iCloudSyncEnabled"
     private nonisolated static let deviceIDKey = "syncDeviceID"
     private nonisolated static let offsetsKey = "syncFileOffsets"
+    private nonisolated static let backfilledKey = "syncBackfilledV2"
 
     /// Store 는 AppState 셋업에서 주입한다 (DatabaseQueue 라 스레드세이프 — 백그라운드에서 호출 가능).
     var store: Store?
@@ -47,16 +48,38 @@ final class SyncEngine: ObservableObject {
 
     /// -v2: 줄 단위 암호화 포맷 (v1 평문 .jsonl 과 파일명으로 분리 — v1 은 무시된다).
     private var ownFileName: String { "device-\(deviceID)-v2.jsonl" }
+    private var ownBoardsFileName: String { "boards-\(deviceID)-v2.jsonl" }
 
     /// 켜기/끄기 — 폴더 생성/타이머 시작·중지. UserDefaults 를 먼저 기록해 enabled 와 일치시킨다.
     func setEnabled(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: Self.enabledKey)
         if on {
             guard ensureFolder() != nil else { return }
-            importOthers() // 켜자마자 즉시 1회
+            exportBoards()          // 비시크릿 보드 구조 내보내기
+            backfillExistingItems() // 최초 1회: 기존 항목을 폴더로
+            importOthers()          // 켜자마자 즉시 1회
             startTimer()
         } else {
             stopTimer()
+        }
+    }
+
+    /// 비시크릿 보드 소속이면 UUID, 아니면 nil (레코드에 실어 임포트 시 같은 보드로 매핑)
+    private func boardUUID(for item: ClipItem) -> String? {
+        guard let bid = item.boardId, let store,
+              let board = try? store.board(id: bid), !board.isSecret else { return nil }
+        return board.uuid
+    }
+
+    /// 최초 1회: 기존 비시크릿 항목 전부를 폴더로 내보낸다 (동기화를 처음 켠 시점 스냅샷).
+    /// 재활성화 시 중복 append 방지를 위해 UserDefaults 플래그로 1회만.
+    private func backfillExistingItems() {
+        guard !UserDefaults.standard.bool(forKey: Self.backfilledKey), let store else { return }
+        UserDefaults.standard.set(true, forKey: Self.backfilledKey)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let items = (try? store.exportableItems()) ?? []
+            for item in items { self.export(item) }
         }
     }
 
@@ -111,7 +134,7 @@ final class SyncEngine: ObservableObject {
         }
         let fileURL = folder.appendingPathComponent(ownFileName)
         // 암호화까지 여기(메인)서 끝내고 파일 append 만 ioQueue 로 — 폴더엔 암호문만 나간다
-        guard let data = Self.encodeLine(SyncRecord(item: item)) else { return }
+        guard let data = Self.encodeLine(SyncRecord(item: item, boardUUID: boardUUID(for: item))) else { return }
         ioQueue.async { [weak self] in
             do {
                 try Self.appendLine(data, to: fileURL)
@@ -134,6 +157,40 @@ final class SyncEngine: ObservableObject {
     }
 
     nonisolated static func blobFileName(_ hash: String) -> String { "blob-\(hash)-v2.enc" }
+
+    /// 비시크릿 보드 구조를 암호화해 boards 파일에 통째로 다시 쓴다 (몇 개뿐이라 전체 재기록).
+    /// 이름·색·순서 변경도 이 재기록 + 피어 upsert 로 전파된다.
+    func exportBoards() {
+        guard enabled, let store, let folder = ensureFolder() else { return }
+        let boards = (try? store.nonSecretBoards()) ?? []
+        let fileURL = folder.appendingPathComponent(ownBoardsFileName)
+        var blob = Data()
+        for b in boards {
+            guard let uuid = b.id.map({ _ in b.uuid }) else { continue }
+            let rec = BoardRecord(uuid: uuid, name: b.name, colorHex: b.colorHex, displayOrder: b.displayOrder)
+            guard let line = Self.encodeBoardLine(rec) else { continue }
+            blob.append(line)
+        }
+        ioQueue.async {
+            try? blob.write(to: fileURL, options: .atomic)
+        }
+    }
+
+    /// 피어 boards 파일들을 읽어 보드를 upsert (백그라운드). 항목 임포트 전에 먼저 돈다.
+    private nonisolated static func importBoards(folder: URL, ownBoardsFile: String, store: Store) {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: nil, options: []) else { return }
+        for url in entries {
+            let name = url.lastPathComponent
+            guard name.hasPrefix("boards-"), name.hasSuffix("-v2.jsonl"), name != ownBoardsFile else { continue }
+            guard let data = try? Data(contentsOf: url) else { continue }
+            var consumed = 0
+            for lineData in splitLines(data, onlyComplete: true, consumed: &consumed) {
+                guard !lineData.isEmpty, let rec = decodeBoardLine(lineData) else { continue }
+                try? store.upsertBoard(uuid: rec.uuid, name: rec.name, colorHex: rec.colorHex, displayOrder: rec.displayOrder)
+            }
+        }
+    }
 
     enum BlobOutcome { case ok, notReady, skip }
 
@@ -197,10 +254,12 @@ final class SyncEngine: ObservableObject {
         guard let folder = ensureFolder() else { return }
         importInFlight = true
         let ownFile = ownFileName
+        let ownBoardsFile = ownBoardsFileName
+        exportBoards() // 매 회차 보드 구조 재기록 → 이름·색·순서 변경도 전파
         Task { [weak self] in
             // 파일 읽기+파싱+store 호출은 detached 로 메인 밖에서, @Published 갱신만 여기(MainActor)로
             let result = await Task.detached {
-                Self.performImport(folder: folder, ownFile: ownFile, store: store)
+                Self.performImport(folder: folder, ownFile: ownFile, ownBoardsFile: ownBoardsFile, store: store)
             }.value
             guard let self else { return }
             self.importInFlight = false
@@ -212,9 +271,11 @@ final class SyncEngine: ObservableObject {
 
     /// 폴더 스캔 → 각 남의 파일에서 오프셋 이후 완결 줄만 파싱 → importIfAbsent. (백그라운드 실행)
     private nonisolated static func performImport(
-        folder: URL, ownFile: String, store: Store
+        folder: URL, ownFile: String, ownBoardsFile: String, store: Store
     ) -> (imported: Int, error: String?) {
         let fm = FileManager.default
+        // 보드 구조를 항목보다 먼저 반영 — 항목이 boardUUID 로 보드를 찾을 수 있게
+        importBoards(folder: folder, ownBoardsFile: ownBoardsFile, store: store)
         let entries: [URL]
         do {
             entries = try fm.contentsOfDirectory(
@@ -277,6 +338,14 @@ final class SyncEngine: ObservableObject {
                     if !lineData.isEmpty,
                        let rec = Self.decodeLine(lineData),
                        var item = rec.toClipItem() {
+                        // 보드 소속 매핑 — boardUUID 있으나 로컬 보드가 아직 없으면 대기(보드 동기화 후 재시도)
+                        if let bUUID = rec.boardUUID {
+                            if let bid = try? store.localBoardId(uuid: bUUID) {
+                                item.boardId = bid
+                            } else {
+                                break lineWalk // 보드 아직 미동기화 → 다음 회차 재시도
+                            }
+                        }
                         if item.kind == .image {
                             switch Self.materializeImageBlob(rec: rec, into: &item, folder: folder, store: store) {
                             case .notReady: break lineWalk // blob 대기 → 이 줄 앞에서 멈춤
@@ -389,6 +458,31 @@ final class SyncEngine: ObservableObject {
               let rec = try? decoder.decode(SyncRecord.self, from: json) else { return nil }
         return rec
     }
+
+    private nonisolated static func encodeBoardLine(_ record: BoardRecord) -> Data? {
+        guard let json = try? encoder.encode(record),
+              let cipher = try? Vault.shared.encryptSync(json) else { return nil }
+        var line = Data(cipher.base64EncodedString().utf8)
+        line.append(0x0A)
+        return line
+    }
+
+    private nonisolated static func decodeBoardLine(_ lineData: Data) -> BoardRecord? {
+        guard let b64 = String(data: lineData, encoding: .utf8),
+              let cipher = Data(base64Encoded: b64),
+              let json = try? Vault.shared.decryptSync(cipher),
+              let rec = try? decoder.decode(BoardRecord.self, from: json) else { return nil }
+        return rec
+    }
+}
+
+/// 동기화용 보드 레코드 (비시크릿만). 시크릿 여부는 로컬에서 false 로 고정.
+private struct BoardRecord: Codable {
+    var v = 1
+    var uuid: String
+    var name: String
+    var colorHex: String
+    var displayOrder: Int
 }
 
 /// JSONL 한 줄 = 동기화 레코드. ClipItem 의 동기화 가능한 필드만 담는다 (블롭·시크릿·DB id 제외).
@@ -405,8 +499,10 @@ private struct SyncRecord: Codable {
     var sourceAppBundleID: String?
     var sourceAppName: String?
     var byteSize: Int
+    /// 비시크릿 보드 소속이면 그 보드의 UUID (임포트 시 같은 보드로 매핑). 없으면 히스토리.
+    var boardUUID: String?
 
-    init(item: ClipItem) {
+    init(item: ClipItem, boardUUID: String?) {
         checksum = item.checksum
         kind = item.kind.rawValue
         title = item.title
@@ -418,6 +514,7 @@ private struct SyncRecord: Codable {
         sourceAppBundleID = item.sourceAppBundleID
         sourceAppName = item.sourceAppName
         byteSize = item.byteSize
+        self.boardUUID = boardUUID
     }
 
     /// 임포트용 ClipItem 구성 — uuid 새로, boardId nil, isEncrypted false. (checksum 은 그대로 유지해 dedup 근거로 쓴다)

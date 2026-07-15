@@ -374,6 +374,56 @@ final class Store {
         }
     }
 
+    // MARK: - 동기화 지원 (백필·보드 매핑)
+
+    /// 동기화 대상 후보 — 봉인(시크릿)되지 않은 항목 전부. export() 가 종류/보드로 다시 거른다.
+    /// (백필용 — 동기화 처음 켤 때 기존 항목을 폴더로 내보내기 위함)
+    func exportableItems() throws -> [ClipItem] {
+        try dbQueue.read { db in
+            try ClipItem.filter(Column("isEncrypted") == false).fetchAll(db)
+        }
+    }
+
+    /// boardId → Board (동기화 레코드에 보드 UUID·시크릿 여부를 싣기 위함)
+    func board(id: Int64) throws -> Board? {
+        try dbQueue.read { db in try Board.fetchOne(db, key: id) }
+    }
+
+    /// 동기화 대상 보드(비시크릿만) — 시크릿 보드 구조는 동기화하지 않는다
+    func nonSecretBoards() throws -> [Board] {
+        try dbQueue.read { db in
+            try Board.filter(Column("isSecret") == false)
+                .order(Column("displayOrder"), Column("id")).fetchAll(db)
+        }
+    }
+
+    /// UUID 로 로컬 보드 id 조회 (임포트 시 보드 소속 매핑)
+    func localBoardId(uuid: String) throws -> Int64? {
+        try dbQueue.read { db in
+            try Board.filter(Column("uuid") == uuid).fetchOne(db)?.id
+        }
+    }
+
+    /// 동기화 임포트: UUID 기준으로 보드 upsert (없으면 생성, 있으면 이름·색·순서 갱신).
+    /// 시크릿 상태는 로컬 우선(시크릿 보드는 동기화 안 되므로 여기 오는 건 비시크릿).
+    @discardableResult
+    func upsertBoard(uuid: String, name: String, colorHex: String, displayOrder: Int) throws -> Int64 {
+        try dbQueue.write { db in
+            if var existing = try Board.filter(Column("uuid") == uuid).fetchOne(db) {
+                existing.name = name
+                existing.colorHex = colorHex
+                existing.displayOrder = displayOrder
+                try existing.update(db)
+                return existing.id!
+            }
+            var board = Board(
+                id: nil, uuid: uuid, name: name, colorHex: colorHex,
+                isSecret: false, displayOrder: displayOrder, createdAt: Date())
+            try board.insert(db)
+            return board.id!
+        }
+    }
+
     /// 히스토리에서만 숨김 (보드 공간에는 유지). 같은 내용을 다시 복사하면 히스토리로 복귀한다.
     func hideFromHistory(_ item: ClipItem) throws {
         try dbQueue.write { db in

@@ -42,7 +42,7 @@ struct StatusMenuView: View {
     /// 화면 표기가 배포 버전과 어긋나던 것 방지. 릴리스명은 릴리스마다 여기서 교체.
     private var versionLabel: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
-        return "v\(version) · " + L("봉한 나루")
+        return "v\(version) · " + L("다 실은 나루")
     }
 
     var body: some View {
