@@ -6,8 +6,10 @@ import Foundation
 /// 자기 파일에만 append 하고, 다른 기기 파일을 폴링해 새 줄만 임포트한다. iCloud Drive 가
 /// 파일을 기기 간에 동기화하므로 우리는 일반 파일 IO 만 한다.
 ///
-/// 동기화 대상은 text/link/color 만 — image/file 은 블롭이 커서 제외하고, 시크릿(봉인) 항목은
-/// 절대 내보내지 않는다. 항목이 시크릿 보드로 봉인되면 removeFromExport 로 클라우드에서도 회수한다.
+/// 폴더에 쓰는 모든 것(레코드 줄·이미지 blob)은 암호구 파생 sync 키로 AES-GCM 암호화된다 →
+/// 폴더 파일 자체가 내 기기에서만 풀린다. 동기화 대상은 text/link/color/image.
+/// 파일(kind .file)과 시크릿(봉인) 항목은 동기화하지 않는다 — 시크릿은 로컬 전용(사용자 결정):
+/// 봉인 시 removeFromExport 로 이미 나간 평문을 회수한다.
 @MainActor
 final class SyncEngine: ObservableObject {
     /// 자기 파일 append/재작성은 이 직렬 큐에서만 — 캡처 핫패스를 막지 않고 쓰기 순서를 보장한다.
@@ -43,7 +45,8 @@ final class SyncEngine: ObservableObject {
         return id
     }
 
-    private var ownFileName: String { "device-\(deviceID).jsonl" }
+    /// -v2: 줄 단위 암호화 포맷 (v1 평문 .jsonl 과 파일명으로 분리 — v1 은 무시된다).
+    private var ownFileName: String { "device-\(deviceID)-v2.jsonl" }
 
     /// 켜기/끄기 — 폴더 생성/타이머 시작·중지. UserDefaults 를 먼저 기록해 enabled 와 일치시킨다.
     func setEnabled(_ on: Bool) {
@@ -95,15 +98,20 @@ final class SyncEngine: ObservableObject {
     /// 자기 파일에 항목 한 줄 append. 비활성/봉인/비대상 종류는 무시.
     func export(_ item: ClipItem) {
         guard enabled, !item.isEncrypted else { return }
-        switch item.kind {
-        case .text, .link, .color: break
-        case .image, .file: return
-        }
         guard let folder = ensureFolder() else { return }
+        switch item.kind {
+        case .text, .link, .color:
+            break
+        case .image:
+            // 이미지 blob 을 암호화해 폴더에 함께 올린다 (파일명 = checksum). 경로 없으면 내보내지 않음.
+            guard let path = item.imagePath else { return }
+            exportBlob(fromPath: path, hash: item.checksum, folder: folder)
+        case .file:
+            return // 파일 blob 동기화는 다음 단계
+        }
         let fileURL = folder.appendingPathComponent(ownFileName)
-        guard let line = try? Self.encoder.encode(SyncRecord(item: item)) else { return }
-        var data = line
-        data.append(0x0A) // 한 레코드 = 한 줄
+        // 암호화까지 여기(메인)서 끝내고 파일 append 만 ioQueue 로 — 폴더엔 암호문만 나간다
+        guard let data = Self.encodeLine(SyncRecord(item: item)) else { return }
         ioQueue.async { [weak self] in
             do {
                 try Self.appendLine(data, to: fileURL)
@@ -112,6 +120,46 @@ final class SyncEngine: ObservableObject {
                 Task { @MainActor in self?.lastError = L("동기화 내보내기 실패: %@", error.localizedDescription) }
             }
         }
+    }
+
+    /// 이미지/파일 blob 을 sync 키로 암호화해 폴더에 쓴다 (checksum 명명 → 내용 dedup, 이미 있으면 생략).
+    private func exportBlob(fromPath path: String, hash: String, folder: URL) {
+        let blobURL = folder.appendingPathComponent(Self.blobFileName(hash))
+        ioQueue.async {
+            guard !FileManager.default.fileExists(atPath: blobURL.path) else { return }
+            guard let plain = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                  let cipher = try? Vault.shared.encryptSync(plain) else { return }
+            try? cipher.write(to: blobURL, options: .atomic)
+        }
+    }
+
+    nonisolated static func blobFileName(_ hash: String) -> String { "blob-\(hash)-v2.enc" }
+
+    enum BlobOutcome { case ok, notReady, skip }
+
+    /// 이미지 blob 을 폴더에서 복호해 로컬 blobs/ 로 되살리고 item.imagePath 설정.
+    /// blob 이 아직 안 왔으면 .notReady (다음 회차 재시도), 손상이면 .skip.
+    private nonisolated static func materializeImageBlob(
+        rec: SyncRecord, into item: inout ClipItem, folder: URL, store: Store
+    ) -> BlobOutcome {
+        let fm = FileManager.default
+        let blobURL = folder.appendingPathComponent(blobFileName(rec.checksum))
+        if !fm.fileExists(atPath: blobURL.path) {
+            let placeholder = folder.appendingPathComponent(".\(blobFileName(rec.checksum)).icloud")
+            if fm.fileExists(atPath: placeholder.path) { try? fm.startDownloadingUbiquitousItem(at: placeholder) }
+            return .notReady
+        }
+        if let status = try? blobURL.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+            .ubiquitousItemDownloadingStatus, status != .current {
+            try? fm.startDownloadingUbiquitousItem(at: blobURL)
+            return .notReady
+        }
+        guard let cipher = try? Data(contentsOf: blobURL),
+              let plain = try? Vault.shared.decryptSync(cipher) else { return .skip }
+        let localPath = store.blobsDirectory.appendingPathComponent("\(rec.checksum).png")
+        do { try plain.write(to: localPath, options: .atomic) } catch { return .skip }
+        item.imagePath = localPath.path
+        return .ok
     }
 
     /// 자기 파일을 다시 써서 해당 checksum 줄을 제거 — 항목이 시크릿 보드로 봉인될 때 클라우드에서도 회수.
@@ -123,9 +171,9 @@ final class SyncEngine: ObservableObject {
             var kept = Data()
             for lineData in Self.splitLines(data) {
                 guard !lineData.isEmpty else { continue }
-                // 대상 checksum 이면 버리고, 파싱 불가한 줄은 보존한다 (남의 손상 데이터를 삼키지 않게)
-                if let rec = try? Self.decoder.decode(SyncRecord.self, from: lineData),
-                   rec.checksum == checksum {
+                // 대상 checksum 이면 버리고, 복호 불가한 줄은 보존한다 (손상 데이터를 삼키지 않게).
+                // 보존 줄은 이미 암호문(base64)이므로 그대로 다시 쓴다 — 재암호화 불필요.
+                if let rec = Self.decodeLine(lineData), rec.checksum == checksum {
                     continue
                 }
                 kept.append(lineData)
@@ -187,15 +235,15 @@ final class SyncEngine: ObservableObject {
             let name = url.lastPathComponent
             let logical: String
             let isPlaceholder: Bool
-            if name.hasPrefix("device-"), name.hasSuffix(".jsonl") {
+            if name.hasPrefix("device-"), name.hasSuffix("-v2.jsonl") {
                 logical = name
                 isPlaceholder = false
-            } else if name.hasPrefix(".device-"), name.hasSuffix(".jsonl.icloud") {
-                // 미다운로드 플레이스홀더: `.device-XXX.jsonl.icloud`
+            } else if name.hasPrefix(".device-"), name.hasSuffix("-v2.jsonl.icloud") {
+                // 미다운로드 플레이스홀더: `.device-XXX-v2.jsonl.icloud`
                 logical = String(name.dropFirst().dropLast(".icloud".count))
                 isPlaceholder = true
             } else {
-                continue
+                continue // v1 평문 파일 등은 무시
             }
             guard logical != ownFile else { continue }
 
@@ -216,17 +264,31 @@ final class SyncEngine: ObservableObject {
                 if offset > data.count { offset = 0 } // 피어가 파일을 재작성(회수)해 줄었으면 처음부터 (checksum dedup 이 중복 방지)
                 guard offset < data.count else { offsets[logical] = data.count; continue }
 
+                // 완결 줄을 하나씩 처리하며 오프셋을 전진. 이미지 blob 이 아직 안 온 줄에서는
+                // 멈추고(offset 을 그 줄 앞에 남김) 다음 회차에 재시도한다.
                 let newBytes = data.subdata(in: offset..<data.count)
-                var consumed = 0
-                for lineData in Self.splitLines(newBytes, onlyComplete: true, consumed: &consumed) {
-                    guard !lineData.isEmpty else { continue }
-                    if let rec = try? Self.decoder.decode(SyncRecord.self, from: lineData),
-                       let item = rec.toClipItem(),
-                       (try? store.importIfAbsent(item)) == true {
-                        imported += 1
+                var cursor = 0
+                lineWalk: while cursor < newBytes.count {
+                    var nl = -1
+                    var i = cursor
+                    while i < newBytes.count { if newBytes[i] == 0x0A { nl = i; break }; i += 1 }
+                    if nl < 0 { break } // 미완결 마지막 줄 — 다음 회차로
+                    let lineData = newBytes.subdata(in: cursor..<nl)
+                    if !lineData.isEmpty,
+                       let rec = Self.decodeLine(lineData),
+                       var item = rec.toClipItem() {
+                        if item.kind == .image {
+                            switch Self.materializeImageBlob(rec: rec, into: &item, folder: folder, store: store) {
+                            case .notReady: break lineWalk // blob 대기 → 이 줄 앞에서 멈춤
+                            case .skip: cursor = nl + 1; continue
+                            case .ok: break
+                            }
+                        }
+                        if (try? store.importIfAbsent(item)) == true { imported += 1 }
                     }
+                    cursor = nl + 1
                 }
-                offsets[logical] = offset + consumed // 미완결 마지막 줄(개행 없음)은 다음 회차로 남긴다
+                offsets[logical] = offset + cursor
             } catch {
                 NSLog("[Sync] 파일 읽기 실패 %@: %@", logical, error.localizedDescription)
                 lastError = L("동기화 파일을 읽을 수 없어요: %@", error.localizedDescription)
@@ -301,6 +363,32 @@ final class SyncEngine: ObservableObject {
         d.dateDecodingStrategy = .iso8601
         return d
     }()
+
+    // MARK: - 줄 암복호 (동기화 폴더엔 암호문만)
+
+    /// 레코드 → JSON → sync 키 AES-GCM → base64 + 개행.
+    /// base64 라 암호문에 0x0A 가 섞이지 않아 개행 프레이밍이 안전하다.
+    private nonisolated static func encodeLine(_ record: SyncRecord) -> Data? {
+        guard let json = try? encoder.encode(record) else { return nil }
+        do {
+            let cipher = try Vault.shared.encryptSync(json)
+            var line = Data(cipher.base64EncodedString().utf8)
+            line.append(0x0A)
+            return line
+        } catch {
+            NSLog("[Sync] encodeLine 암호화 실패: %@", String(describing: error))
+            return nil
+        }
+    }
+
+    /// base64 줄 → 복호 → 레코드. 복호 실패(손상·다른 키·v1 평문)는 nil 로 조용히 건너뛴다.
+    private nonisolated static func decodeLine(_ lineData: Data) -> SyncRecord? {
+        guard let b64 = String(data: lineData, encoding: .utf8),
+              let cipher = Data(base64Encoded: b64),
+              let json = try? Vault.shared.decryptSync(cipher),
+              let rec = try? decoder.decode(SyncRecord.self, from: json) else { return nil }
+        return rec
+    }
 }
 
 /// JSONL 한 줄 = 동기화 레코드. ClipItem 의 동기화 가능한 필드만 담는다 (블롭·시크릿·DB id 제외).

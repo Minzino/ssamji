@@ -201,3 +201,14 @@
 "동기화 내보내기 실패: %@" = "Sync export failed: %@";
 "동기화 회수 실패: %@" = "Sync recall failed: %@";
 "금고와 나루" = "Vault & Ferry";
+
+/* iCloud sync passphrase (v1.5) */
+"암호화되어 Mac 간 동기화 · 각 Mac에서 동기화 암호 1회 필요 · 이미지·파일·시크릿 제외" = "Encrypted sync between Macs · each Mac needs the sync passphrase once · images, files, secrets excluded";
+"동기화 암호 (다른 Mac과 같게)" = "Sync passphrase (same on every Mac)";
+"설정하고 켜기" = "Set and turn on";
+"취소" = "Cancel";
+"암호를 잊으면 동기화된 내용을 복구할 수 없어요." = "If you forget it, synced content can't be recovered.";
+"동기화 암호 변경" = "Change sync passphrase";
+"암호 설정 실패: %@" = "Couldn't set passphrase: %@";
+"암호화되어 Mac 간 동기화 · 각 Mac에서 동기화 암호 1회 필요 · 시크릿·파일 제외" = "Encrypted sync between Macs · each Mac needs the sync passphrase once · secrets and files excluded";
+"봉한 나루" = "Sealed Ferry";
