@@ -9,7 +9,7 @@ cask "ssamji" do
   desc "Fast, keyboard-first clipboard manager for macOS"
   homepage "https://github.com/Minzino/ssamji"
 
-  depends_on macos: ">= :sequoia"
+  depends_on macos: :sequoia
 
   app "쌈지.app"
 
