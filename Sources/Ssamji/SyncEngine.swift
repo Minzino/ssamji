@@ -6,8 +6,10 @@ import Foundation
 /// 자기 파일에만 append 하고, 다른 기기 파일을 폴링해 새 줄만 임포트한다. iCloud Drive 가
 /// 파일을 기기 간에 동기화하므로 우리는 일반 파일 IO 만 한다.
 ///
-/// 동기화 대상은 text/link/color 만 — image/file 은 블롭이 커서 제외하고, 시크릿(봉인) 항목은
-/// 절대 내보내지 않는다. 항목이 시크릿 보드로 봉인되면 removeFromExport 로 클라우드에서도 회수한다.
+/// 폴더에 쓰는 모든 것(레코드 줄·이미지 blob)은 암호구 파생 sync 키로 AES-GCM 암호화된다 →
+/// 폴더 파일 자체가 내 기기에서만 풀린다. 동기화 대상은 text/link/color/image.
+/// 파일(kind .file)과 시크릿(봉인) 항목은 동기화하지 않는다 — 시크릿은 로컬 전용(사용자 결정):
+/// 봉인 시 removeFromExport 로 이미 나간 평문을 회수한다.
 @MainActor
 final class SyncEngine: ObservableObject {
     /// 자기 파일 append/재작성은 이 직렬 큐에서만 — 캡처 핫패스를 막지 않고 쓰기 순서를 보장한다.

@@ -191,27 +191,6 @@ final class AppState: ObservableObject {
             runVaultSelftest()
             exit(0)
         }
-        // 검증용 CLI 플래그: 동기화 키(iCloud Keychain) 암복호 왕복 — self-signed 앱 가능 여부 판정
-        if CommandLine.arguments.contains("--sync-selftest") {
-            do {
-                // 암호구 파생 → 저장 → 암복호 왕복 (동일 암호가 동일 키를 내는지)
-                try Vault.shared.setSyncPassphrase("selftest-passphrase-앙")
-                let sample = Data("sync-selftest-payload-내용".utf8)
-                let cipher = try Vault.shared.encryptSync(sample)
-                let back = try Vault.shared.decryptSync(cipher)
-                Vault.shared.clearSyncKey() // 테스트 키는 남기지 않는다
-                print("sync-selftest: OK (왕복 \(back == sample ? "일치" : "불일치"), 암호문 \(cipher.count)바이트)")
-            } catch {
-                print("sync-selftest: 실패 \(error)")
-            }
-            exit(0)
-        }
-        if let arg = CommandLine.arguments.first(where: { $0.hasPrefix("--set-sync-pass=") }) {
-            let pass = String(arg.dropFirst("--set-sync-pass=".count))
-            do { try Vault.shared.setSyncPassphrase(pass); print("set-sync-pass: OK") }
-            catch { print("set-sync-pass: 실패 \(error)") }
-            exit(0)
-        }
     }
 
     /// 봉인된 항목 전수에 대해 메모리 복호 왕복을 검증 — 성공/실패 수만 출력.

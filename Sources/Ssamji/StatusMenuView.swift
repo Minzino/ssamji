@@ -42,7 +42,7 @@ struct StatusMenuView: View {
     /// 화면 표기가 배포 버전과 어긋나던 것 방지. 릴리스명은 릴리스마다 여기서 교체.
     private var versionLabel: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
-        return "v\(version) · " + L("금고와 나루")
+        return "v\(version) · " + L("봉한 나루")
     }
 
     var body: some View {
@@ -228,7 +228,7 @@ struct StatusMenuView: View {
                 }
             ),
             title: L("iCloud 동기화 (베타)"),
-            caption: L("암호화되어 Mac 간 동기화 · 각 Mac에서 동기화 암호 1회 필요 · 이미지·파일·시크릿 제외")
+            caption: L("암호화되어 Mac 간 동기화 · 각 Mac에서 동기화 암호 1회 필요 · 시크릿·파일 제외")
         )
         if showSyncSetup {
             VStack(alignment: .leading, spacing: 6) {
