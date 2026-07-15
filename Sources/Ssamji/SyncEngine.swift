@@ -96,11 +96,17 @@ final class SyncEngine: ObservableObject {
     /// 자기 파일에 항목 한 줄 append. 비활성/봉인/비대상 종류는 무시.
     func export(_ item: ClipItem) {
         guard enabled, !item.isEncrypted else { return }
-        switch item.kind {
-        case .text, .link, .color: break
-        case .image, .file: return
-        }
         guard let folder = ensureFolder() else { return }
+        switch item.kind {
+        case .text, .link, .color:
+            break
+        case .image:
+            // 이미지 blob 을 암호화해 폴더에 함께 올린다 (파일명 = checksum). 경로 없으면 내보내지 않음.
+            guard let path = item.imagePath else { return }
+            exportBlob(fromPath: path, hash: item.checksum, folder: folder)
+        case .file:
+            return // 파일 blob 동기화는 다음 단계
+        }
         let fileURL = folder.appendingPathComponent(ownFileName)
         // 암호화까지 여기(메인)서 끝내고 파일 append 만 ioQueue 로 — 폴더엔 암호문만 나간다
         guard let data = Self.encodeLine(SyncRecord(item: item)) else { return }
@@ -112,6 +118,46 @@ final class SyncEngine: ObservableObject {
                 Task { @MainActor in self?.lastError = L("동기화 내보내기 실패: %@", error.localizedDescription) }
             }
         }
+    }
+
+    /// 이미지/파일 blob 을 sync 키로 암호화해 폴더에 쓴다 (checksum 명명 → 내용 dedup, 이미 있으면 생략).
+    private func exportBlob(fromPath path: String, hash: String, folder: URL) {
+        let blobURL = folder.appendingPathComponent(Self.blobFileName(hash))
+        ioQueue.async {
+            guard !FileManager.default.fileExists(atPath: blobURL.path) else { return }
+            guard let plain = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                  let cipher = try? Vault.shared.encryptSync(plain) else { return }
+            try? cipher.write(to: blobURL, options: .atomic)
+        }
+    }
+
+    nonisolated static func blobFileName(_ hash: String) -> String { "blob-\(hash)-v2.enc" }
+
+    enum BlobOutcome { case ok, notReady, skip }
+
+    /// 이미지 blob 을 폴더에서 복호해 로컬 blobs/ 로 되살리고 item.imagePath 설정.
+    /// blob 이 아직 안 왔으면 .notReady (다음 회차 재시도), 손상이면 .skip.
+    private nonisolated static func materializeImageBlob(
+        rec: SyncRecord, into item: inout ClipItem, folder: URL, store: Store
+    ) -> BlobOutcome {
+        let fm = FileManager.default
+        let blobURL = folder.appendingPathComponent(blobFileName(rec.checksum))
+        if !fm.fileExists(atPath: blobURL.path) {
+            let placeholder = folder.appendingPathComponent(".\(blobFileName(rec.checksum)).icloud")
+            if fm.fileExists(atPath: placeholder.path) { try? fm.startDownloadingUbiquitousItem(at: placeholder) }
+            return .notReady
+        }
+        if let status = try? blobURL.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+            .ubiquitousItemDownloadingStatus, status != .current {
+            try? fm.startDownloadingUbiquitousItem(at: blobURL)
+            return .notReady
+        }
+        guard let cipher = try? Data(contentsOf: blobURL),
+              let plain = try? Vault.shared.decryptSync(cipher) else { return .skip }
+        let localPath = store.blobsDirectory.appendingPathComponent("\(rec.checksum).png")
+        do { try plain.write(to: localPath, options: .atomic) } catch { return .skip }
+        item.imagePath = localPath.path
+        return .ok
     }
 
     /// 자기 파일을 다시 써서 해당 checksum 줄을 제거 — 항목이 시크릿 보드로 봉인될 때 클라우드에서도 회수.
@@ -216,17 +262,31 @@ final class SyncEngine: ObservableObject {
                 if offset > data.count { offset = 0 } // 피어가 파일을 재작성(회수)해 줄었으면 처음부터 (checksum dedup 이 중복 방지)
                 guard offset < data.count else { offsets[logical] = data.count; continue }
 
+                // 완결 줄을 하나씩 처리하며 오프셋을 전진. 이미지 blob 이 아직 안 온 줄에서는
+                // 멈추고(offset 을 그 줄 앞에 남김) 다음 회차에 재시도한다.
                 let newBytes = data.subdata(in: offset..<data.count)
-                var consumed = 0
-                for lineData in Self.splitLines(newBytes, onlyComplete: true, consumed: &consumed) {
-                    guard !lineData.isEmpty else { continue }
-                    if let rec = Self.decodeLine(lineData),
-                       let item = rec.toClipItem(),
-                       (try? store.importIfAbsent(item)) == true {
-                        imported += 1
+                var cursor = 0
+                lineWalk: while cursor < newBytes.count {
+                    var nl = -1
+                    var i = cursor
+                    while i < newBytes.count { if newBytes[i] == 0x0A { nl = i; break }; i += 1 }
+                    if nl < 0 { break } // 미완결 마지막 줄 — 다음 회차로
+                    let lineData = newBytes.subdata(in: cursor..<nl)
+                    if !lineData.isEmpty,
+                       let rec = Self.decodeLine(lineData),
+                       var item = rec.toClipItem() {
+                        if item.kind == .image {
+                            switch Self.materializeImageBlob(rec: rec, into: &item, folder: folder, store: store) {
+                            case .notReady: break lineWalk // blob 대기 → 이 줄 앞에서 멈춤
+                            case .skip: cursor = nl + 1; continue
+                            case .ok: break
+                            }
+                        }
+                        if (try? store.importIfAbsent(item)) == true { imported += 1 }
                     }
+                    cursor = nl + 1
                 }
-                offsets[logical] = offset + consumed // 미완결 마지막 줄(개행 없음)은 다음 회차로 남긴다
+                offsets[logical] = offset + cursor
             } catch {
                 NSLog("[Sync] 파일 읽기 실패 %@: %@", logical, error.localizedDescription)
                 lastError = L("동기화 파일을 읽을 수 없어요: %@", error.localizedDescription)

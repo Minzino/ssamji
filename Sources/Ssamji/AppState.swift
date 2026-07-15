@@ -206,6 +206,12 @@ final class AppState: ObservableObject {
             }
             exit(0)
         }
+        if let arg = CommandLine.arguments.first(where: { $0.hasPrefix("--set-sync-pass=") }) {
+            let pass = String(arg.dropFirst("--set-sync-pass=".count))
+            do { try Vault.shared.setSyncPassphrase(pass); print("set-sync-pass: OK") }
+            catch { print("set-sync-pass: 실패 \(error)") }
+            exit(0)
+        }
     }
 
     /// 봉인된 항목 전수에 대해 메모리 복호 왕복을 검증 — 성공/실패 수만 출력.
