@@ -212,3 +212,4 @@
 "암호 설정 실패: %@" = "Couldn't set passphrase: %@";
 "암호화되어 Mac 간 동기화 · 각 Mac에서 동기화 암호 1회 필요 · 시크릿·파일 제외" = "Encrypted sync between Macs · each Mac needs the sync passphrase once · secrets and files excluded";
 "봉한 나루" = "Sealed Ferry";
+"다 실은 나루" = "Laden Ferry";
