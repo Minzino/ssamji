@@ -1,8 +1,8 @@
 # 쌈지 Homebrew cask — 공개 시 github.com/Minzino/homebrew-tap 리포의 Casks/ssamji.rb 로 복사.
 # 새 릴리스마다 version/sha256 갱신 (scripts/release.sh 가 값을 출력해준다).
 cask "ssamji" do
-  version "1.5.0"
-  sha256 "ef39aa1d2bc53ea33b2f8241d9dbca8ef032180293a4578bcca40c7aea05b8c5"
+  version "1.6.0"
+  sha256 "97709fa2042ac742c3160f50040a08c9e7828bf1adf0e92d48327634d43105da"
 
   url "https://github.com/Minzino/ssamji/releases/download/v#{version}/Ssamji-#{version}.zip"
   name "Ssamji"
