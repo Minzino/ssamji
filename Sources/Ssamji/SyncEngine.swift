@@ -27,6 +27,9 @@ final class SyncEngine: ObservableObject {
     /// 임포트 성공(신규 1개 이상) 시 호출 — AppState 가 refresh + HUD 로 배선한다.
     var onImported: ((Int) -> Void)?
 
+    /// 동기화 사이클 시작(true)/종료(false) — AppState 가 로딩 표시로 미러링한다.
+    var onSyncActivity: ((Bool) -> Void)?
+
     @Published var lastSyncAt: Date?
     @Published var lastError: String?
 
@@ -253,18 +256,26 @@ final class SyncEngine: ObservableObject {
         guard enabled, !importInFlight, let store else { return }
         guard let folder = ensureFolder() else { return }
         importInFlight = true
+        onSyncActivity?(true) // 로딩 표시 시작
         let ownFile = ownFileName
         let ownBoardsFile = ownBoardsFileName
         exportBoards() // 매 회차 보드 구조 재기록 → 이름·색·순서 변경도 전파
+        // 사이클이 눈에 안 띄게 빠를 때도 스피너가 잠깐은 보이도록 최소 표시 시간 보장
+        let startedAt = ContinuousClock.now
         Task { [weak self] in
             // 파일 읽기+파싱+store 호출은 detached 로 메인 밖에서, @Published 갱신만 여기(MainActor)로
             let result = await Task.detached {
                 Self.performImport(folder: folder, ownFile: ownFile, ownBoardsFile: ownBoardsFile, store: store)
             }.value
+            let elapsed = startedAt.duration(to: .now)
+            if elapsed < .milliseconds(500) {
+                try? await Task.sleep(for: .milliseconds(500) - elapsed)
+            }
             guard let self else { return }
             self.importInFlight = false
             if let error = result.error { self.lastError = error }
             self.lastSyncAt = Date()
+            self.onSyncActivity?(false) // 로딩 표시 종료
             if result.imported > 0 { self.onImported?(result.imported) }
         }
     }

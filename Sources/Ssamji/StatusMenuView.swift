@@ -254,9 +254,41 @@ struct StatusMenuView: View {
             }
             .padding(.top, 2)
         } else if hasSyncKey && state.iCloudSyncEnabled {
-            Button(L("동기화 암호 변경")) { showSyncSetup = true }
-                .buttonStyle(.borderless).controlSize(.small).font(.caption2)
+            HStack(spacing: 6) {
+                syncStatusLabel
+                Spacer()
+                Button(L("동기화 암호 변경")) { showSyncSetup = true }
+                    .buttonStyle(.borderless).controlSize(.small).font(.caption2)
+            }
+            .padding(.top, 1)
         }
+    }
+
+    /// 동기화 상태 표시 — 진행 중이면 네이티브 스피너 + "동기화 중…", 아니면 마지막 동기화 시각
+    @ViewBuilder private var syncStatusLabel: some View {
+        if state.isSyncing {
+            HStack(spacing: 5) {
+                ProgressView().controlSize(.mini)
+                Text(L("동기화 중…"))
+            }
+            .font(.caption2).foregroundStyle(.secondary)
+        } else if let at = state.lastSyncAt {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 9)).foregroundStyle(SsamjiColor.success)
+                Text(L("동기화됨 · %@", Self.relativeTime(at)))
+            }
+            .font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+
+    /// 상대 시각 문자열 (방금/N초 전/N분 전/N시간 전)
+    private static func relativeTime(_ date: Date) -> String {
+        let s = Int(Date().timeIntervalSince(date))
+        if s < 10 { return L("방금") }
+        if s < 60 { return L("%d초 전", s) }
+        if s < 3600 { return L("%d분 전", s / 60) }
+        return L("%d시간 전", s / 3600)
     }
 
     private func applySyncPassphrase() {
