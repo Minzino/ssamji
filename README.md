@@ -25,7 +25,6 @@ A *ssamji* is a traditional Korean pouch for carrying small, precious things. Th
 - **Paste stack** for multi-part work: collect clips with `⌘K`, then `⌘⏎` pastes them joined by newlines, spaces, commas, `&&` — or one at a time, advancing on every `⌘V`.
 - **Transform paste** (`⌘T`): UPPERCASE, lowercase, trim, kebab-case, snake_case, pretty-printed JSON, shell-escaped, and other terminal-friendly shapes — original stays untouched.
 - **End-to-end encrypted iCloud sync (beta), no account required from you or me.** Ssamji syncs your text and image history — including how it's organized into boards — between your Macs through an iCloud Drive folder. Turning it on backfills what you already have. Everything written there is AES-GCM encrypted with a key derived from a sync passphrase you set once per Mac, so the folder is unreadable to anyone but you. Secret boards stay local by design, and files aren't synced. Off by default.
-- **Migrate from Paste** in one click — boards, labels, and images included.
 - **Respectful by design**: stealth mode (`⌘⇧E`) pauses collection instantly, per-app exclusions (`⌘E`), retention from 1 day to forever, and concealed content (password managers) is never collected at all.
 - **English and Korean**, following your system language.
 
