@@ -43,7 +43,8 @@ final class SyncEngine: ObservableObject {
         return id
     }
 
-    private var ownFileName: String { "device-\(deviceID).jsonl" }
+    /// -v2: 줄 단위 암호화 포맷 (v1 평문 .jsonl 과 파일명으로 분리 — v1 은 무시된다).
+    private var ownFileName: String { "device-\(deviceID)-v2.jsonl" }
 
     /// 켜기/끄기 — 폴더 생성/타이머 시작·중지. UserDefaults 를 먼저 기록해 enabled 와 일치시킨다.
     func setEnabled(_ on: Bool) {
@@ -101,9 +102,8 @@ final class SyncEngine: ObservableObject {
         }
         guard let folder = ensureFolder() else { return }
         let fileURL = folder.appendingPathComponent(ownFileName)
-        guard let line = try? Self.encoder.encode(SyncRecord(item: item)) else { return }
-        var data = line
-        data.append(0x0A) // 한 레코드 = 한 줄
+        // 암호화까지 여기(메인)서 끝내고 파일 append 만 ioQueue 로 — 폴더엔 암호문만 나간다
+        guard let data = Self.encodeLine(SyncRecord(item: item)) else { return }
         ioQueue.async { [weak self] in
             do {
                 try Self.appendLine(data, to: fileURL)
@@ -123,9 +123,9 @@ final class SyncEngine: ObservableObject {
             var kept = Data()
             for lineData in Self.splitLines(data) {
                 guard !lineData.isEmpty else { continue }
-                // 대상 checksum 이면 버리고, 파싱 불가한 줄은 보존한다 (남의 손상 데이터를 삼키지 않게)
-                if let rec = try? Self.decoder.decode(SyncRecord.self, from: lineData),
-                   rec.checksum == checksum {
+                // 대상 checksum 이면 버리고, 복호 불가한 줄은 보존한다 (손상 데이터를 삼키지 않게).
+                // 보존 줄은 이미 암호문(base64)이므로 그대로 다시 쓴다 — 재암호화 불필요.
+                if let rec = Self.decodeLine(lineData), rec.checksum == checksum {
                     continue
                 }
                 kept.append(lineData)
@@ -187,15 +187,15 @@ final class SyncEngine: ObservableObject {
             let name = url.lastPathComponent
             let logical: String
             let isPlaceholder: Bool
-            if name.hasPrefix("device-"), name.hasSuffix(".jsonl") {
+            if name.hasPrefix("device-"), name.hasSuffix("-v2.jsonl") {
                 logical = name
                 isPlaceholder = false
-            } else if name.hasPrefix(".device-"), name.hasSuffix(".jsonl.icloud") {
-                // 미다운로드 플레이스홀더: `.device-XXX.jsonl.icloud`
+            } else if name.hasPrefix(".device-"), name.hasSuffix("-v2.jsonl.icloud") {
+                // 미다운로드 플레이스홀더: `.device-XXX-v2.jsonl.icloud`
                 logical = String(name.dropFirst().dropLast(".icloud".count))
                 isPlaceholder = true
             } else {
-                continue
+                continue // v1 평문 파일 등은 무시
             }
             guard logical != ownFile else { continue }
 
@@ -220,7 +220,7 @@ final class SyncEngine: ObservableObject {
                 var consumed = 0
                 for lineData in Self.splitLines(newBytes, onlyComplete: true, consumed: &consumed) {
                     guard !lineData.isEmpty else { continue }
-                    if let rec = try? Self.decoder.decode(SyncRecord.self, from: lineData),
+                    if let rec = Self.decodeLine(lineData),
                        let item = rec.toClipItem(),
                        (try? store.importIfAbsent(item)) == true {
                         imported += 1
@@ -301,6 +301,32 @@ final class SyncEngine: ObservableObject {
         d.dateDecodingStrategy = .iso8601
         return d
     }()
+
+    // MARK: - 줄 암복호 (동기화 폴더엔 암호문만)
+
+    /// 레코드 → JSON → sync 키 AES-GCM → base64 + 개행.
+    /// base64 라 암호문에 0x0A 가 섞이지 않아 개행 프레이밍이 안전하다.
+    private nonisolated static func encodeLine(_ record: SyncRecord) -> Data? {
+        guard let json = try? encoder.encode(record) else { return nil }
+        do {
+            let cipher = try Vault.shared.encryptSync(json)
+            var line = Data(cipher.base64EncodedString().utf8)
+            line.append(0x0A)
+            return line
+        } catch {
+            NSLog("[Sync] encodeLine 암호화 실패: %@", String(describing: error))
+            return nil
+        }
+    }
+
+    /// base64 줄 → 복호 → 레코드. 복호 실패(손상·다른 키·v1 평문)는 nil 로 조용히 건너뛴다.
+    private nonisolated static func decodeLine(_ lineData: Data) -> SyncRecord? {
+        guard let b64 = String(data: lineData, encoding: .utf8),
+              let cipher = Data(base64Encoded: b64),
+              let json = try? Vault.shared.decryptSync(cipher),
+              let rec = try? decoder.decode(SyncRecord.self, from: json) else { return nil }
+        return rec
+    }
 }
 
 /// JSONL 한 줄 = 동기화 레코드. ClipItem 의 동기화 가능한 필드만 담는다 (블롭·시크릿·DB id 제외).

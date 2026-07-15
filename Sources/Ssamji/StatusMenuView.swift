@@ -13,6 +13,11 @@ struct StatusMenuView: View {
     @State private var pasteboard: Permissions.Status = .systemDefault
     @State private var accessibility = true
     @State private var draftRetention: Double = 91
+    // 동기화 암호 설정 상태
+    @State private var hasSyncKey = false
+    @State private var showSyncSetup = false
+    @State private var syncPassInput = ""
+    @State private var syncSetupError: String?
 
     /// 드래그 중엔 드래프트 값, 평소엔 확정 값 표시
     private var retentionLabel: String {
@@ -151,11 +156,7 @@ struct StatusMenuView: View {
             // 시스템
             sectionLabel(L("시스템"))
             groupCard {
-                toggleRow(
-                    isOn: $state.iCloudSyncEnabled,
-                    title: L("iCloud 동기화 (베타)"),
-                    caption: L("iCloud Drive 폴더로 Mac 간 동기화 · 시크릿·이미지·파일 제외")
-                )
+                syncRow
                 groupSeparator
                 HStack {
                     Text(L("팔레트 단축키"))
@@ -206,6 +207,69 @@ struct StatusMenuView: View {
             state.refresh()
             refreshPermissions()
             draftRetention = state.retentionDays == 0 ? 91 : Double(state.retentionDays)
+            hasSyncKey = Vault.shared.hasSyncKey
+        }
+    }
+
+    // MARK: - iCloud 동기화 행 (암호구 설정 포함)
+
+    @ViewBuilder private var syncRow: some View {
+        toggleRow(
+            isOn: Binding(
+                get: { state.iCloudSyncEnabled },
+                set: { on in
+                    // 켜기 전에 동기화 암호가 없으면 먼저 입력받는다
+                    if on && !hasSyncKey {
+                        showSyncSetup = true
+                    } else {
+                        state.iCloudSyncEnabled = on
+                        if !on { showSyncSetup = false }
+                    }
+                }
+            ),
+            title: L("iCloud 동기화 (베타)"),
+            caption: L("암호화되어 Mac 간 동기화 · 각 Mac에서 동기화 암호 1회 필요 · 이미지·파일·시크릿 제외")
+        )
+        if showSyncSetup {
+            VStack(alignment: .leading, spacing: 6) {
+                SecureField(L("동기화 암호 (다른 Mac과 같게)"), text: $syncPassInput)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                    .onSubmit(applySyncPassphrase)
+                if let syncSetupError {
+                    Text(syncSetupError).font(.caption2).foregroundStyle(SsamjiColor.danger)
+                }
+                HStack(spacing: 8) {
+                    Button(L("설정하고 켜기"), action: applySyncPassphrase)
+                        .controlSize(.small)
+                        .disabled(syncPassInput.count < 4)
+                    Button(L("취소")) {
+                        showSyncSetup = false; syncPassInput = ""; syncSetupError = nil
+                    }
+                    .controlSize(.small)
+                    Spacer()
+                }
+                Text(L("암호를 잊으면 동기화된 내용을 복구할 수 없어요."))
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+            .padding(.top, 2)
+        } else if hasSyncKey && state.iCloudSyncEnabled {
+            Button(L("동기화 암호 변경")) { showSyncSetup = true }
+                .buttonStyle(.borderless).controlSize(.small).font(.caption2)
+        }
+    }
+
+    private func applySyncPassphrase() {
+        guard syncPassInput.count >= 4 else { return }
+        do {
+            try Vault.shared.setSyncPassphrase(syncPassInput)
+            hasSyncKey = true
+            showSyncSetup = false
+            syncPassInput = ""
+            syncSetupError = nil
+            state.iCloudSyncEnabled = true
+        } catch {
+            syncSetupError = L("암호 설정 실패: %@", error.localizedDescription)
         }
     }
 
