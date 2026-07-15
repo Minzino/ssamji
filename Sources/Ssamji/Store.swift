@@ -97,7 +97,116 @@ final class Store {
             }
         }
 
+        migrator.registerMigration("v5-vault") { db in
+            try db.alter(table: "items") { t in
+                t.add(column: "isEncrypted", .boolean).notNull().defaults(to: false)
+                t.add(column: "vaultPayload", .blob)
+            }
+        }
+
         try migrator.migrate(dbQueue)
+        // 업데이트 전부터 시크릿 보드에 있던 평문 항목들을 봉인 (1회성·멱등)
+        try encryptLegacySecretItems()
+    }
+
+    // MARK: - 시크릿 금고 (Vault)
+    // 시크릿 보드 항목은 내용 컬럼을 비우고 AES-GCM 페이로드로 봉인한다.
+    // checksum 은 dedup 을 위해 평문 유지(해시라 내용 복원 불가). customTitle(라벨)은
+    // 마스킹 상태의 표시·검색 수단이므로 설계상 평문이다. FTS 는 synchronize 트리거가
+    // UPDATE 를 따라가므로 봉인 순간 인덱스에서도 내용이 사라진다.
+
+    private struct VaultPayload: Codable {
+        var title: String
+        var text: String?
+        var url: String?
+        var colorHex: String?
+        var fileURLs: String?
+    }
+
+    /// 항목 봉인 — 내용 컬럼 → vaultPayload. 이미지는 블롭 파일 자체를 암호화.
+    private static func sealFields(_ item: inout ClipItem) throws {
+        guard !item.isEncrypted else { return }
+        let payload = VaultPayload(
+            title: item.title, text: item.text, url: item.url,
+            colorHex: item.colorHex, fileURLs: item.fileURLs)
+        item.vaultPayload = try Vault.shared.encrypt(JSONEncoder().encode(payload))
+        item.title = ""
+        item.text = nil
+        item.url = nil
+        item.colorHex = nil
+        item.fileURLs = nil
+        item.isEncrypted = true
+        if let path = item.imagePath {
+            let url = URL(fileURLWithPath: path)
+            let data = try Data(contentsOf: url)
+            try Vault.shared.encrypt(data).write(to: url, options: .atomic)
+        }
+    }
+
+    /// 항목 개봉 — vaultPayload → 내용 컬럼 복원. 이미지 블롭 파일 복호화.
+    private static func openFields(_ item: inout ClipItem) throws {
+        guard item.isEncrypted, let sealed = item.vaultPayload else { return }
+        let payload = try JSONDecoder().decode(VaultPayload.self, from: Vault.shared.decrypt(sealed))
+        item.title = payload.title
+        item.text = payload.text
+        item.url = payload.url
+        item.colorHex = payload.colorHex
+        item.fileURLs = payload.fileURLs
+        item.vaultPayload = nil
+        item.isEncrypted = false
+        if let path = item.imagePath {
+            let url = URL(fileURLWithPath: path)
+            let data = try Data(contentsOf: url)
+            try Vault.shared.decrypt(data).write(to: url, options: .atomic)
+        }
+    }
+
+    /// 붙여넣기/프리뷰용 메모리 복호본 — DB 는 건드리지 않는다.
+    /// 이미지는 파일을 복호화하지 않고 데이터만 돌려준다 (디스크는 봉인 유지).
+    func decryptedCopy(of item: ClipItem) throws -> (item: ClipItem, imageData: Data?) {
+        guard item.isEncrypted, let sealed = item.vaultPayload else { return (item, nil) }
+        var copy = item
+        let payload = try JSONDecoder().decode(VaultPayload.self, from: Vault.shared.decrypt(sealed))
+        copy.title = payload.title
+        copy.text = payload.text
+        copy.url = payload.url
+        copy.colorHex = payload.colorHex
+        copy.fileURLs = payload.fileURLs
+        var imageData: Data?
+        if let path = copy.imagePath {
+            imageData = try Vault.shared.decrypt(Data(contentsOf: URL(fileURLWithPath: path)))
+        }
+        return (copy, imageData)
+    }
+
+    /// 봉인된 항목 전체 — 자가 검증(--vault-selftest)용
+    func allEncryptedItems() throws -> [ClipItem] {
+        try dbQueue.read { db in
+            try ClipItem.filter(Column("isEncrypted") == true).fetchAll(db)
+        }
+    }
+
+    /// 마이그레이션: 이미 시크릿 보드에 들어있는 평문 항목 봉인 (실패 항목은 건너뛰고 계속)
+    private func encryptLegacySecretItems() throws {
+        try dbQueue.write { db in
+            let secretIDs = try Int64.fetchAll(
+                db, sql: "SELECT id FROM boards WHERE isSecret = 1")
+            guard !secretIDs.isEmpty else { return }
+            let doomed = try ClipItem
+                .filter(secretIDs.contains(Column("boardId")))
+                .filter(Column("isEncrypted") == false)
+                .fetchAll(db)
+            for var item in doomed {
+                do {
+                    try Self.sealFields(&item)
+                    try item.update(db)
+                } catch {
+                    // 하나가 실패해도 나머지는 봉인한다 — 실패 항목은 다음 실행에서 재시도
+                    NSLog("[Vault] 레거시 봉인 실패 id=%@: %@",
+                          String(describing: item.id), error.localizedDescription)
+                }
+            }
+        }
     }
 
     // MARK: - 검색 쿼리 빌더
@@ -215,6 +324,21 @@ final class Store {
         }
     }
 
+    /// 동기화 임포트: 같은 checksum 이 없을 때만 삽입 — save() 와 달리 기존 항목의 updatedAt 을
+    /// 끌어올리지 않는다 (다른 Mac 에서 온 항목이 로컬 히스토리 순서를 흔들지 않게).
+    @discardableResult
+    func importIfAbsent(_ item: ClipItem) throws -> Bool {
+        try dbQueue.write { db in
+            let exists = try ClipItem
+                .filter(Column("checksum") == item.checksum)
+                .fetchCount(db) > 0
+            if exists { return false }
+            var new = item
+            try new.insert(db)
+            return true
+        }
+    }
+
     func recent(limit: Int = 20) throws -> [ClipItem] {
         try items(matching: "", boardID: nil, limit: limit)
     }
@@ -306,9 +430,17 @@ final class Store {
     }
 
     /// 보드 삭제 — 소속 항목들은 FK onDelete(.setNull) 로 히스토리에 남는다.
+    /// 시크릿 보드였다면 항목을 먼저 개봉한다 (히스토리에 암호문 고아가 남지 않게).
     func deleteBoard(_ board: Board) throws {
         _ = try dbQueue.write { db in
-            try board.delete(db)
+            if board.isSecret, let boardID = board.id {
+                let items = try ClipItem.filter(Column("boardId") == boardID).fetchAll(db)
+                for var item in items {
+                    try Self.openFields(&item)
+                    try item.update(db)
+                }
+            }
+            return try board.delete(db)
         }
     }
 
@@ -316,6 +448,14 @@ final class Store {
         try dbQueue.write { db in
             var updated = item
             updated.boardId = boardID
+            // 시크릿 경계를 넘는 순간 봉인/개봉 — 시크릿 보드 안 내용은 항상 암호문
+            let targetSecret = try boardID
+                .flatMap { try Board.fetchOne(db, key: $0)?.isSecret } ?? false
+            if targetSecret {
+                try Self.sealFields(&updated)
+            } else {
+                try Self.openFields(&updated)
+            }
             try updated.update(db)
         }
     }
@@ -349,6 +489,13 @@ final class Store {
             var updated = board
             updated.isSecret = isSecret
             try updated.update(db)
+            // 보드의 시크릿 상태와 소속 항목의 봉인 상태를 함께 맞춘다
+            guard let boardID = board.id else { return }
+            let items = try ClipItem.filter(Column("boardId") == boardID).fetchAll(db)
+            for var item in items {
+                if isSecret { try Self.sealFields(&item) } else { try Self.openFields(&item) }
+                try item.update(db)
+            }
         }
     }
 

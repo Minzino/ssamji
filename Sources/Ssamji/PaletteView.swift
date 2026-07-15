@@ -381,7 +381,7 @@ struct PaletteView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button(L("내용 표시")) { vm.secretRevealed = true }
+                Button(L("내용 표시")) { vm.setReveal(true) }
                     .controlSize(.small)
             }
             .frame(maxWidth: .infinity)

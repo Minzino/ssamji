@@ -230,6 +230,8 @@ final class PaletteViewModel: ObservableObject {
     var onExcludeApp: ((ClipItem) -> Void)?
     /// 은신 모드 토글 — 수집 일시정지 (⌘⇧E, AppState 가 배선)
     var onToggleStealth: (() -> Void)?
+    /// 항목이 시크릿 보드로 봉인될 때 (checksum) — iCloud 동기화에서도 회수하도록 AppState 가 배선
+    var onItemSealed: ((String) -> Void)?
 
     init(store: Store) {
         self.store = store
@@ -252,6 +254,32 @@ final class PaletteViewModel: ObservableObject {
     /// 시크릿 보드 소속 항목은 내용을 가린다.
     func isMasked(_ item: ClipItem) -> Bool {
         board(for: item)?.isSecret == true
+    }
+
+    /// ⌥ 피킹/'내용 표시'의 단일 진입점 — 봉인(암호화) 항목은 Touch ID 세션을 먼저 연다.
+    /// 공개 시 프리뷰를 메모리 복호본으로 바꿔치기하고, 해제 시 원래(봉인) 항목으로 되돌린다.
+    func setReveal(_ on: Bool) {
+        guard on else {
+            if secretRevealed {
+                secretRevealed = false
+                schedulePreviewUpdate()
+            }
+            return
+        }
+        guard !secretRevealed, let item = selectedItem else { return }
+        guard item.isEncrypted else {
+            secretRevealed = true
+            return
+        }
+        Task { @MainActor in
+            guard await Vault.shared.unlockSession(
+                reason: L("시크릿 내용을 보기 위해 인증합니다")) else { return }
+            // 인증하는 사이 선택이 옮겨졌으면 무시
+            guard selectedItem?.id == item.id,
+                  let plain = try? store.decryptedCopy(of: item).item else { return }
+            secretRevealed = true
+            previewItem = plain
+        }
     }
 
     func reset() {
@@ -427,8 +455,18 @@ final class PaletteViewModel: ObservableObject {
     }
 
     func toggleBoardSecret(_ board: Board) {
+        let makingSecret = !board.isSecret
+        // 시크릿 전환으로 봉인될 항목들은 동기화 내보내기에서도 회수한다 (평문 잔존 방지).
+        // setBoardSecret 이 checksum 을 비우진 않으므로 전환 전에 목록을 뜬다.
+        let sealedChecksums: [String] = makingSecret
+            ? (try? store.items(matching: "", boardID: board.id, limit: 10_000))
+                .map { $0.map(\.checksum) } ?? []
+            : []
         do {
-            try store.setBoardSecret(board, isSecret: !board.isSecret)
+            try store.setBoardSecret(board, isSecret: makingSecret)
+            for checksum in sealedChecksums {
+                onItemSealed?(checksum)
+            }
         } catch {
             FeedbackHUD.shared.failure(L("시크릿 설정 실패 — %@", error.localizedDescription))
         }
@@ -528,7 +566,29 @@ final class PaletteViewModel: ObservableObject {
             return
         }
         let option = Self.stackCommitOptions[stackPickerIndex]
-        let texts = stack.compactMap(stackText(for:))
+        // 봉인(시크릿) 항목이 섞여 있으면 Touch ID 세션을 먼저 연다
+        if stack.contains(where: { $0.isEncrypted }) {
+            Task { @MainActor in
+                guard await Vault.shared.unlockSession(
+                    reason: L("시크릿 항목을 붙여넣기 위해 인증합니다")) else {
+                    FeedbackHUD.shared.failure(L("인증되지 않아 취소했어요"))
+                    return
+                }
+                finishStackCommit(option: option, action: action)
+            }
+            return
+        }
+        finishStackCommit(option: option, action: action)
+    }
+
+    private func finishStackCommit(option: StackCommitOption, action: CommitAction) {
+        let source = stack.map { item -> ClipItem in
+            guard item.isEncrypted, let plain = try? store.decryptedCopy(of: item).item else {
+                return item
+            }
+            return plain
+        }
+        let texts = source.compactMap(stackText(for:))
         guard !texts.isEmpty else {
             closeStackPicker()
             return
@@ -701,6 +761,11 @@ final class PaletteViewModel: ObservableObject {
         } catch {
             succeeded = false
             FeedbackHUD.shared.failure(L("보드 배정 실패 — %@", error.localizedDescription))
+        }
+        // 시크릿 보드로 봉인되면 이미 클라우드에 내보낸 평문을 회수한다 (setBoard 가 sealFields 를 수행한 뒤)
+        if succeeded, let boardID,
+           boards.first(where: { $0.id == boardID })?.isSecret == true {
+            onItemSealed?(item.checksum)
         }
         closePicker()
         reloadBoards()
