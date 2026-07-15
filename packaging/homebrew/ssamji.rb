@@ -2,9 +2,9 @@
 # 새 릴리스마다 version/sha256 갱신 (scripts/release.sh 가 값을 출력해준다).
 cask "ssamji" do
   version "1.6.1"
-  sha256 "d747c371a40f664832c2ae2f6fada497027ac033617110fb2a26f3235f43a5f7"
+  sha256 "b0f4d6e97bb03e63d90996ce6b0fc5a3cf78c6cd5b377ebbf68f9a7988a3404d"
 
-  url "https://github.com/Minzino/ssamji/releases/download/v#{version}/Ssamji-#{version}.zip"
+  url "https://github.com/Minzino/ssamji/releases/download/v#{version}/Ssamji-#{version}.dmg"
   name "Ssamji"
   desc "Fast, keyboard-first clipboard manager for macOS"
   homepage "https://github.com/Minzino/ssamji"
