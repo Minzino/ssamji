@@ -106,6 +106,10 @@ final class AppState: ObservableObject {
     /// iCloud Drive 폴더 기반 Mac 간 동기화 (베타). store 는 셋업에서 주입한다.
     let syncEngine = SyncEngine()
 
+    /// 동기화 로딩 표시용 — SyncEngine 이 콜백으로 갱신 (설정창 스피너/최근 동기화 시각)
+    @Published var isSyncing = false
+    @Published var lastSyncAt: Date?
+
     /// iCloud 동기화 온오프 — UserDefaults 미러 + syncEngine 시작/중지. 초기값은 UserDefaults 에서 로드.
     @Published var iCloudSyncEnabled: Bool = UserDefaults.standard.bool(forKey: "iCloudSyncEnabled") {
         didSet {
@@ -170,6 +174,10 @@ final class AppState: ObservableObject {
         syncEngine.onImported = { [weak self] count in
             self?.refresh()
             FeedbackHUD.shared.success(L("다른 Mac 에서 %d개 가져옴", count))
+        }
+        syncEngine.onSyncActivity = { [weak self] active in
+            self?.isSyncing = active
+            if !active { self?.lastSyncAt = Date() }
         }
         if iCloudSyncEnabled {
             syncEngine.setEnabled(true)
