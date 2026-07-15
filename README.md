@@ -10,63 +10,72 @@
   <a href="README.ko.md"><b>한국어 README</b></a>
 </p>
 
----
+<p align="center">
+  <img src="docs/demo.gif" width="720" alt="Ssamji in action">
+</p>
 
-**Ssamji** (쌈지 — a traditional Korean pouch for carrying precious little things) keeps everything you copy, makes it searchable in milliseconds, and pastes it back with a single keystroke. Everything stays on your Mac: no account, no network, no telemetry.
+A *ssamji* is a traditional Korean pouch for carrying small, precious things. This one carries everything you copy — searchable in milliseconds, pasted back with a single keystroke, and never leaving your Mac unless you ask it to.
 
-## Why
+## Highlights
 
-macOS 26 (Tahoe) introduced clipboard privacy restrictions that broke long-unmaintained clipboard managers. Instead of waiting for a fix that might never come, Ssamji was built from scratch for the new rules — it asks for the right permissions and works *with* the system, not around it.
-
-## Features
-
-- **Central palette** (`⌘⇧V` by default, configurable) — search field, result list, and rich preview in one non-activating panel. Your current app keeps focus.
-- **Direct paste** — `Enter` pastes straight into the frontmost app (via Accessibility). `Shift Enter` copies only. `⌘1–9` pastes instantly.
-- **Boards** — organize clips into pinned collections. Boards are independent spaces: deleting from history never touches board items. Create (`⌘N`), assign (`⌘P`), switch (`⌘[` / `⌘]`), reorder (`⌘⇧←→`).
-- **Secret boards** — masked previews, labels instead of content, hold `⌥` to peek. (At-rest encryption with Touch ID is on the roadmap.)
-- **Paste stack** — collect several clips (`⌘K`), then paste them all at once (`⌘⏎`) joined by newline, space, comma, `&&`, or sequentially.
-- **Transform paste** (`⌘T`) — upper/lower case, trim, kebab/snake case, JSON pretty-print, and terminal-friendly variants.
-- **Real full-text search** — SQLite FTS5 with a trigram tokenizer: substring matching that works for Korean (and everything else), debounced so typing never lags.
-- **Migrate from Paste** — one-click import of your entire Paste library (boards, labels, and images included).
-- **Stealth mode** (`⌘⇧E`) — pause collection instantly; the menu bar icon dims while paused.
-- **App exclusions** (`⌘E`) — never collect from password managers or any app you choose.
-- **Retention policy** — keep history 1–90 days or forever; board items are always preserved.
-- **Localized** — English and Korean, follows your system language.
+- **One shortcut, everything you copied.** `⌘⇧V` opens a central palette with search, list, and a rich preview. It's a non-activating panel, so the app you're working in never loses focus — press `Enter` and the clip lands right where your cursor was.
+- **Search that actually finds things.** SQLite FTS5 with a trigram tokenizer means substring matching that works mid-word, mid-URL, and mid-Korean-syllable. Typing never lags: search is debounced and previews are precomputed.
+- **Boards** keep your keepers. Collections that live outside history — clear your history freely, board items stay. Create with `⌘N`, file things away with `⌘P`, hop between boards with `⌘[` / `⌘]`.
+- **Secret boards are actual vaults.** Items in a secret board are encrypted at rest (AES-GCM, key in your Keychain) and wiped from the search index. Revealing or pasting one asks for **Touch ID**. Labels stay visible so you know what's inside without seeing what's inside.
+- **Paste stack** for multi-part work: collect clips with `⌘K`, then `⌘⏎` pastes them joined by newlines, spaces, commas, `&&` — or one at a time, advancing on every `⌘V`.
+- **Transform paste** (`⌘T`): UPPERCASE, lowercase, trim, kebab-case, snake_case, pretty-printed JSON, shell-escaped, and other terminal-friendly shapes — original stays untouched.
+- **iCloud sync (beta), no account required from you or me.** Ssamji syncs between your Macs through a plain iCloud Drive folder. Secrets, images, and files never sync. Off by default.
+- **Migrate from Paste** in one click — boards, labels, and images included.
+- **Respectful by design**: stealth mode (`⌘⇧E`) pauses collection instantly, per-app exclusions (`⌘E`), retention from 1 day to forever, and concealed content (password managers) is never collected at all.
+- **English and Korean**, following your system language.
 
 Press `⌘/` inside the palette for the full shortcut reference.
 
+<p align="center">
+  <img src="docs/palette-en.png" width="720" alt="Ssamji palette — search, list, and preview">
+</p>
+
 ## Install
 
-Requires **macOS 15.4+**. Build from source (Xcode command line tools with the Swift 6 toolchain):
+Requires **macOS 15.4 or later**.
+
+### Homebrew
+
+```bash
+brew install --cask minzino/tap/ssamji --no-quarantine
+```
+
+> `--no-quarantine` is needed because releases are currently self-signed. It will no longer be necessary once notarized builds ship.
+
+### Direct download
+
+Grab `Ssamji-x.y.z.zip` from [Releases](https://github.com/Minzino/ssamji/releases), unzip, drag **쌈지.app** into `/Applications`, then **right-click → Open** the first time (self-signed build).
+
+### Build from source
 
 ```bash
 git clone https://github.com/Minzino/ssamji.git
 cd ssamji
-./scripts/bundle.sh   # builds, signs, installs to /Applications, and relaunches
+./scripts/bundle.sh   # builds, signs, installs to /Applications, relaunches
 ```
 
-On first run, grant two permissions:
+### First-run permissions
 
 1. **Clipboard access** — System Settings → Privacy & Security → set Ssamji to *Always Allow* (macOS 26).
-2. **Accessibility** — required for direct paste (`⌘V` synthesis). Without it, `Enter` copies to the clipboard instead.
-
-> The bundled script signs with a local self-signed certificate. Prebuilt, notarized releases are planned.
+2. **Accessibility** — powers direct paste (synthesized `⌘V`). Without it, `Enter` copies instead of pasting.
 
 ## Privacy
 
-- Everything is stored locally in `~/Library/Application Support/Ssamji/`.
-- No network access, no analytics, no account.
-- Content marked concealed by the system (`org.nspasteboard.ConcealedType`, e.g. password managers) is never collected.
+Everything lives in `~/Library/Application Support/Ssamji/`. No accounts, no analytics, no network calls — the optional iCloud sync writes files to *your* iCloud Drive and nowhere else. Secret-board content is AES-GCM encrypted on disk with a key that never leaves your Mac's Keychain, which is also why secrets are excluded from sync.
 
 ## Performance
 
-Ssamji is built around a strict "no jank" contract: precomputed previews, memoized rows, CJK font-fallback pre-resolution, and key-repeat-aware preview deferral. Scrolling hundreds of items or switching boards stays within a single frame budget on Apple silicon.
+Ssamji is built against a strict no-jank contract: precomputed previews, memoized rows, CJK font-fallback pre-resolution, and key-repeat-aware rendering. Scrolling hundreds of items or switching boards stays within a frame budget on Apple silicon — and there's an in-repo injection harness to prove it stays that way.
 
 ## Roadmap
 
-- Secret board vault — AES-GCM encryption at rest + Touch ID to reveal
-- iCloud sync (CloudKit)
-- Notarized binary releases / Homebrew cask
+- Notarized releases (Developer ID) — removes the Gatekeeper friction
+- CloudKit sync upgrade with real-time push
 - Frecency-based ranking
 
 ## License
